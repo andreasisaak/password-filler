@@ -31,7 +31,7 @@ jobs:
         working-directory: host
 
       - name: Create universal binary
-        run: lipo -create -output dist/passwordfiller-host dist/htpasswd-host-macos-arm64 dist/htpasswd-host-macos-x64
+        run: lipo -create -output dist/passwordfiller-host dist/htpasswd-host-arm64 dist/htpasswd-host-x64
 
       - name: Pack Chrome CRX
         run: |
