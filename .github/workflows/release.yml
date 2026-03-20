@@ -68,20 +68,7 @@ jobs:
           mv dist/*.xpi dist/password-filler-firefox-v${VERSION}.xpi
 
       - name: Update Chrome update manifest
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          node -e "
-            const v = '${VERSION}';
-            const xml = \`<?xml version='1.0' encoding='UTF-8'?>
-<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
-  <app appid='hgelgpkdbkoipapbeblddhgfjlebckah'>
-    <updatecheck status='ok'
-      url='https://github.com/andreasisaak/password-filler/releases/download/v\${v}/password-filler-chrome-v\${v}.crx'
-      version='\${v}' />
-  </app>
-</gupdate>\n\`;
-            require('fs').writeFileSync('updates/chrome.xml', xml);
-          "
+        run: node scripts/update-chrome-xml.js ${{ steps.version.outputs.version }}
 
       - name: Update Firefox update manifest
         run: |
