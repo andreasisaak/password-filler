@@ -70,8 +70,18 @@ jobs:
       - name: Update Chrome update manifest
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          sed -i '' "s|url='[^']*'|url='https://github.com/andreasisaak/password-filler/releases/download/v${VERSION}/password-filler-chrome-v${VERSION}.crx'|" updates/chrome.xml
-          sed -i '' "s|version='[^']*'|version='${VERSION}'|" updates/chrome.xml
+          node -e "
+            const v = '${VERSION}';
+            const xml = \`<?xml version='1.0' encoding='UTF-8'?>
+<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+  <app appid='hgelgpkdbkoipapbeblddhgfjlebckah'>
+    <updatecheck status='ok'
+      url='https://github.com/andreasisaak/password-filler/releases/download/v\${v}/password-filler-chrome-v\${v}.crx'
+      version='\${v}' />
+  </app>
+</gupdate>\n\`;
+            require('fs').writeFileSync('updates/chrome.xml', xml);
+          "
 
       - name: Update Firefox update manifest
         run: |
