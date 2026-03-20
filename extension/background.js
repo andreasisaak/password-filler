@@ -1,6 +1,6 @@
 const HOST_NAME = "app.passwordfiller";
 
-// Cache: hostname → { username, password }
+// Cache: hostname → { username, password } — NOT persisted to disk
 let credentialCache = new Map();
 let cacheTimestamp = 0;
 let refreshInProgress = false;
@@ -10,7 +10,7 @@ let port = null;
 let pendingCallbacks = [];
 
 // Track pending auth requests to prevent infinite loops
-const pendingRequests = new Set();
+const pendingRequests = new Map(); // requestId → timestamp
 
 // --- Native Messaging (persistent connection) ---
 
@@ -23,8 +23,11 @@ function ensureConnected() {
 
     port.onMessage.addListener((response) => {
       console.log("[htpasswd] Native response:", JSON.stringify(response).substring(0, 200));
-      const callback = pendingCallbacks.shift();
-      if (callback) callback(response);
+      const pending = pendingCallbacks.shift();
+      if (pending) {
+        clearTimeout(pending.timer);
+        pending.resolve(response);
+      }
     });
 
     port.onDisconnect.addListener(() => {
@@ -32,7 +35,9 @@ function ensureConnected() {
       console.log("[htpasswd] Native host disconnected:", error);
       port = null;
       while (pendingCallbacks.length > 0) {
-        pendingCallbacks.shift()({ error });
+        const pending = pendingCallbacks.shift();
+        clearTimeout(pending.timer);
+        pending.resolve({ error });
       }
     });
 
@@ -49,7 +54,14 @@ function sendNativeMessage(message) {
       resolve({ error: "Failed to connect to native host" });
       return;
     }
-    pendingCallbacks.push(resolve);
+    const timer = setTimeout(() => {
+      const idx = pendingCallbacks.findIndex((cb) => cb.timer === timer);
+      if (idx !== -1) {
+        pendingCallbacks.splice(idx, 1);
+        resolve({ error: "Native host timeout after 30s" });
+      }
+    }, 30000);
+    pendingCallbacks.push({ resolve, timer });
     port.postMessage(message);
   });
 }
@@ -72,7 +84,7 @@ chrome.webRequest.onAuthRequired.addListener(
       return;
     }
 
-    pendingRequests.add(details.requestId);
+    pendingRequests.set(details.requestId, Date.now());
 
     lookupCredentials(details.url)
       .then((credentials) => {
@@ -103,6 +115,14 @@ chrome.webRequest.onErrorOccurred.addListener(
   { urls: ["<all_urls>"] }
 );
 
+// Periodic cleanup of stale pending requests (tab closed, network timeout)
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [id, ts] of pendingRequests) {
+    if (ts < cutoff) pendingRequests.delete(id);
+  }
+}, 30000);
+
 // --- Credential Lookup ---
 
 async function lookupCredentials(url) {
@@ -113,7 +133,6 @@ async function lookupCredentials(url) {
     return credentialCache.get(hostname);
   }
 
-  // Cache miss — try native host (triggers Touch ID if not connected)
   console.log("[htpasswd] Cache miss, asking host:", hostname);
   const response = await sendNativeMessage({ action: "lookup", hostname });
 
@@ -126,27 +145,23 @@ async function lookupCredentials(url) {
   return null;
 }
 
-// --- Cache Persistence ---
+// --- Cache (summary only — credentials are NOT persisted to disk) ---
 
-let cachedItemsSummary = []; // [{title, domains}] for popup display
+let cachedItemsSummary = [];
 
 async function saveCache() {
-  const data = {};
-  credentialCache.forEach((value, key) => { data[key] = value; });
-  await chrome.storage.local.set({ credentials: data, cacheTimestamp, items: cachedItemsSummary });
-  console.log("[htpasswd] Cache saved to storage");
+  // Only save display metadata — never persist credentials to disk
+  await chrome.storage.local.set({ cacheTimestamp, items: cachedItemsSummary });
+  console.log("[htpasswd] Cache metadata saved");
 }
 
 async function loadCache() {
-  const result = await chrome.storage.local.get(["credentials", "cacheTimestamp", "items"]);
-  if (result.credentials && result.cacheTimestamp) {
-    credentialCache.clear();
-    for (const [hostname, creds] of Object.entries(result.credentials)) {
-      credentialCache.set(hostname, creds);
-    }
+  const result = await chrome.storage.local.get(["cacheTimestamp", "items"]);
+  if (result.cacheTimestamp) {
     cacheTimestamp = result.cacheTimestamp;
     cachedItemsSummary = result.items || [];
-    console.log("[htpasswd] Cache loaded from storage:", credentialCache.size, "hostnames");
+    // credentialCache is intentionally NOT restored from storage
+    console.log("[htpasswd] Cache metadata loaded (credentials will be fetched on demand)");
     return true;
   }
   return false;
@@ -203,17 +218,14 @@ function getStatus() {
   };
 }
 
-// Startup: load from storage only. Never auto-refresh.
+// Startup: load metadata only. Credentials fetched on demand from native host.
 loadCache().then((loaded) => {
   if (loaded) {
-    console.log("[htpasswd] Cache loaded, ready");
+    console.log("[htpasswd] Cache metadata loaded, ready");
   } else {
     console.log("[htpasswd] No cache yet — use popup to refresh");
   }
 });
-
-// No automatic refresh — only manual via popup button
-// Cache persists in storage across sessions
 
 // --- Popup Communication ---
 // MUST return true from ALL branches to prevent Chrome "Error handling response" bug

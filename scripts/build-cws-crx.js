@@ -22,11 +22,16 @@ for (const junk of ['.DS_Store', '.amo-upload-uuid']) {
   if (fs.existsSync(p)) fs.rmSync(p);
 }
 
-// Remove key and update_url from manifest
+// Strip Chrome-incompatible and CWS-incompatible fields from manifest
 const manifestPath = path.join(tmpDir, 'manifest.json');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 delete manifest.key;
 delete manifest.update_url;
+delete manifest.browser_specific_settings;
+// Remove Firefox-only 'scripts' from background (CWS MV3 only uses service_worker)
+if (manifest.background?.scripts) {
+  delete manifest.background.scripts;
+}
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
 const keyPath = path.resolve('extension.pem');

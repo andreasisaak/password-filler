@@ -23,12 +23,13 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Update manifest version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
           node -e "
             const fs = require('fs');
             const m = JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8'));
-            m.version = '${VERSION}';
+            m.version = process.env.VERSION;
             fs.writeFileSync('extension/manifest.json', JSON.stringify(m, null, 2) + '\n');
           "
 
@@ -46,19 +47,22 @@ jobs:
       - name: Pack Chrome CRX
         env:
           CHROME_PEM: ${{ secrets.CHROME_EXTENSION_PEM }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
           npm install --no-save crx3
-          node scripts/pack-crx.js ${VERSION}
-          node scripts/build-cws-crx.js ${VERSION}
-          rm -f extension.pem
+          node scripts/pack-crx.js "$VERSION"
+          node scripts/build-cws-crx.js "$VERSION"
+
+      - name: Cleanup PEM key
+        if: always()
+        run: rm -f extension.pem
 
       - name: Sign Firefox extension
         env:
           AMO_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
           AMO_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
           npm install -g web-ext
           web-ext sign \
             --source-dir extension \
@@ -66,21 +70,24 @@ jobs:
             --api-key "$AMO_API_KEY" \
             --api-secret "$AMO_API_SECRET" \
             --artifacts-dir dist
-          mv dist/*.xpi dist/password-filler-firefox-v${VERSION}.xpi
+          mv dist/*.xpi "dist/password-filler-firefox-v${VERSION}.xpi"
 
       - name: Update Chrome update manifest
         run: node scripts/update-chrome-xml.js ${{ steps.version.outputs.version }}
 
       - name: Update Firefox update manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
           node -e "
             const fs = require('fs');
             const m = JSON.parse(fs.readFileSync('updates/firefox.json', 'utf8'));
-            m.addons['passwordfiller@app'].updates.unshift({
-              version: '${VERSION}',
-              update_link: 'https://github.com/andreasisaak/password-filler/releases/download/v${VERSION}/password-filler-firefox-v${VERSION}.xpi'
+            const addon = m.addons['passwordfiller@app'];
+            addon.updates.unshift({
+              version: process.env.VERSION,
+              update_link: 'https://github.com/andreasisaak/password-filler/releases/download/v' + process.env.VERSION + '/password-filler-firefox-v' + process.env.VERSION + '.xpi'
             });
+            addon.updates = addon.updates.slice(0, 10);
             fs.writeFileSync('updates/firefox.json', JSON.stringify(m, null, 2) + '\n');
           "
 
@@ -100,6 +107,7 @@ jobs:
           mkdir -p pkg-root/Library/Application\ Support/passwordfiller
           cp dist/passwordfiller-host "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
           chmod +x "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
+          chmod +x installer/postinstall
           pkgbuild \
             --root pkg-root \
             --identifier app.passwordfiller \

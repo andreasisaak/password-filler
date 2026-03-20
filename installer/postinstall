@@ -1,0 +1,147 @@
+#!/bin/bash
+set -e
+
+# --- Detect console user via scutil (returns empty at login screen, unlike stat) ---
+CONSOLE_USER=$(/usr/sbin/scutil <<< "show State:/Users/ConsoleUser" | /usr/bin/awk '/Name :/ && ! /loginwindow/ { print $3 }')
+
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = "root" ] || [ "$CONSOLE_USER" = "_mbsetupuser" ]; then
+  exit 0  # No interactive user logged in (MDM/headless/login screen) — skip
+fi
+
+CONSOLE_UID=$(/usr/bin/id -u "$CONSOLE_USER")
+USER_HOME=$(/usr/bin/dscl . -read /Users/"$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | /usr/bin/awk '{print $2}')
+
+if [ -z "$USER_HOME" ] || [ ! -d "$USER_HOME" ]; then
+  exit 0  # No valid home directory — skip silently
+fi
+
+SUPPORT_DIR="$USER_HOME/Library/Application Support/passwordfiller"
+BINARY_SRC="/Library/Application Support/passwordfiller/passwordfiller-host"
+BINARY_DEST="$SUPPORT_DIR/passwordfiller-host"
+CONFIG_PATH="$SUPPORT_DIR/config.json"
+HOST_NAME="app.passwordfiller"
+EXTENSION_ID="hgelgpkdbkoipapbeblddhgfjlebckah"
+FIREFOX_EXT_ID="passwordfiller@app"
+
+CHROME_NMH="$USER_HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+BRAVE_NMH="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+FIREFOX_NMH="$USER_HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
+CHROME_EXT="$USER_HOME/Library/Application Support/Google/Chrome/External Extensions"
+BRAVE_EXT="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/External Extensions"
+
+# --- 1. Copy binary to user support dir ---
+/bin/mkdir -p "$SUPPORT_DIR"
+/bin/cp "$BINARY_SRC" "$BINARY_DEST"
+/bin/chmod +x "$BINARY_DEST"
+/usr/sbin/chown -R "$CONSOLE_USER" "$SUPPORT_DIR"
+
+# --- 2. Install op CLI if missing (non-fatal, signature-verified) ---
+OP_BIN=""
+for op_path in /opt/homebrew/bin/op /usr/local/bin/op /opt/local/bin/op; do
+  if [ -x "$op_path" ]; then
+    OP_BIN="$op_path"
+    break
+  fi
+done
+
+if [ -z "$OP_BIN" ]; then
+  OP_VERSION="2.30.3"
+  OP_PKG=$(/usr/bin/mktemp /tmp/op-install.XXXXXX.pkg)
+  if /usr/bin/curl --fail -sSL \
+    "https://cache.agilebits.com/dist/1P/op2/pkg/v${OP_VERSION}/op_darwin_universal_v${OP_VERSION}.pkg" \
+    -o "$OP_PKG" 2>/dev/null; then
+    # Verify signature before running as root
+    if /usr/sbin/pkgutil --check-signature "$OP_PKG" 2>/dev/null | /usr/bin/grep -q "AgileBits Inc\."; then
+      /usr/sbin/installer -pkg "$OP_PKG" -target / 2>/dev/null || true
+    fi
+  fi
+  /bin/rm -f "$OP_PKG"
+fi
+
+# --- 3. Ask for 1Password account ---
+if [ ! -f "$CONFIG_PATH" ]; then
+  ACCOUNT=$(/bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
+    -e 'display dialog "Enter your 1Password account URL:" default answer "team.1password.com" with title "Password Filler Setup"' \
+    -e 'text returned of result' 2>/dev/null || echo "")
+  if [ -z "$ACCOUNT" ]; then
+    /bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
+      -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning' 2>/dev/null || true
+    exit 1
+  fi
+  # Use python3 for safe JSON encoding; fall back to sed if python3 fails or is unavailable
+  if [ -x "/usr/bin/python3" ] && /usr/bin/python3 -c \
+    "import sys, json; print(json.dumps({'op_account': sys.argv[1], 'op_tag': '.htaccess'}))" \
+    "$ACCOUNT" > "$CONFIG_PATH" 2>/dev/null; then
+    :  # success
+  else
+    ACCOUNT_ESC=$(printf '%s' "$ACCOUNT" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
+    printf '{"op_account":"%s","op_tag":".htaccess"}\n' "$ACCOUNT_ESC" > "$CONFIG_PATH"
+  fi
+  /bin/chmod 600 "$CONFIG_PATH"
+  /usr/sbin/chown "$CONSOLE_USER" "$CONFIG_PATH"
+fi
+
+# --- 4. Register native messaging host ---
+/bin/mkdir -p "$CHROME_NMH" "$BRAVE_NMH" "$FIREFOX_NMH"
+/usr/sbin/chown "$CONSOLE_USER" "$CHROME_NMH" "$BRAVE_NMH" "$FIREFOX_NMH"
+
+/bin/cat > "$CHROME_NMH/$HOST_NAME.json" <<EOF
+{
+  "name": "$HOST_NAME",
+  "description": "Password Filler - reads credentials from 1Password",
+  "path": "$BINARY_DEST",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://$EXTENSION_ID/"]
+}
+EOF
+/usr/sbin/chown "$CONSOLE_USER" "$CHROME_NMH/$HOST_NAME.json"
+
+/bin/cp "$CHROME_NMH/$HOST_NAME.json" "$BRAVE_NMH/$HOST_NAME.json"
+/usr/sbin/chown "$CONSOLE_USER" "$BRAVE_NMH/$HOST_NAME.json"
+
+/bin/cat > "$FIREFOX_NMH/$HOST_NAME.json" <<EOF
+{
+  "name": "$HOST_NAME",
+  "description": "Password Filler - reads credentials from 1Password",
+  "path": "$BINARY_DEST",
+  "type": "stdio",
+  "allowed_extensions": ["$FIREFOX_EXT_ID"]
+}
+EOF
+/usr/sbin/chown "$CONSOLE_USER" "$FIREFOX_NMH/$HOST_NAME.json"
+
+# --- 5. Register Chrome/Brave external extension ---
+/bin/mkdir -p "$CHROME_EXT" "$BRAVE_EXT"
+/usr/sbin/chown "$CONSOLE_USER" "$CHROME_EXT" "$BRAVE_EXT"
+EXT_JSON='{"external_update_url":"https://raw.githubusercontent.com/andreasisaak/password-filler/main/updates/chrome.xml"}'
+printf '%s\n' "$EXT_JSON" > "$CHROME_EXT/$EXTENSION_ID.json"
+/usr/sbin/chown "$CONSOLE_USER" "$CHROME_EXT/$EXTENSION_ID.json"
+printf '%s\n' "$EXT_JSON" > "$BRAVE_EXT/$EXTENSION_ID.json"
+/usr/sbin/chown "$CONSOLE_USER" "$BRAVE_EXT/$EXTENSION_ID.json"
+
+# --- 6. Install Firefox extension ---
+GITHUB_RESPONSE=$(/usr/bin/curl --fail -sSL \
+  "https://api.github.com/repos/andreasisaak/password-filler/releases/latest" 2>/dev/null || echo "")
+
+LATEST_XPI=""
+if [ -n "$GITHUB_RESPONSE" ] && [ -x "/usr/bin/python3" ]; then
+  LATEST_XPI=$(printf '%s' "$GITHUB_RESPONSE" | /usr/bin/python3 -c \
+    "import sys, json; data = json.load(sys.stdin); urls = [a['browser_download_url'] for a in data.get('assets', []) if a['name'].endswith('.xpi')]; print(urls[0] if urls else '')" \
+    2>/dev/null || echo "")
+fi
+# Fallback: grep/sed if python3 unavailable or failed
+if [ -z "$LATEST_XPI" ] && [ -n "$GITHUB_RESPONSE" ]; then
+  LATEST_XPI=$(printf '%s' "$GITHUB_RESPONSE" | /usr/bin/grep '"browser_download_url"' | /usr/bin/grep '\.xpi' | /usr/bin/head -1 | /usr/bin/sed 's/.*"browser_download_url": "\(.*\)".*/\1/' || echo "")
+fi
+
+if [ -n "$LATEST_XPI" ]; then
+  XPI_PATH=$(/usr/bin/mktemp /tmp/passwordfiller.XXXXXX.xpi)
+  if /usr/bin/curl --fail -sSL "$LATEST_XPI" -o "$XPI_PATH" 2>/dev/null; then
+    /bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/open -a Firefox "$XPI_PATH" 2>/dev/null || true
+  fi
+  /bin/rm -f "$XPI_PATH"
+fi
+
+# --- 7. Done ---
+/bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
+  -e 'display notification "Firefox will prompt you to install the add-on. Restart Chrome/Brave to activate the extension." with title "Password Filler installed"' 2>/dev/null || true

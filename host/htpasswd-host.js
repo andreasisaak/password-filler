@@ -13,16 +13,24 @@ if (fs.existsSync(CONFIG_PATH)) {
   config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 }
 
-const LOG_FILE = path.join(require("os").tmpdir(), "passwordfiller.log");
+// Log to ~/Library/Logs/ with restricted permissions — not world-readable /tmp
+const LOG_FILE = path.join(require("os").homedir(), "Library", "Logs", "passwordfiller.log");
 const OP_ACCOUNT = config.op_account;
 const OP_TAG = config.op_tag || ".htaccess";
 const SECTION_PATTERN = /(htaccess|basicauth|basic.?auth|htpasswd|webuser)/i;
 
-// In-memory credential cache (persists for lifetime of this process)
+// Cache TTL: 15 minutes
+const CACHE_TTL_MS = 15 * 60 * 1000;
 let cachedItems = null;
+let cacheLoadedAt = 0;
 
 function log(message) {
-  fs.appendFileSync(LOG_FILE, new Date().toISOString() + " " + message + "\n");
+  try {
+    const entry = new Date().toISOString() + " " + message + "\n";
+    fs.appendFileSync(LOG_FILE, entry, { mode: 0o600 });
+  } catch {
+    // Logging must never crash the host
+  }
 }
 
 // --- Native Messaging Protocol (length-prefixed JSON over stdio) ---
@@ -75,7 +83,7 @@ function opExec(args) {
   const argv = OP_ACCOUNT
     ? [...args, "--account", OP_ACCOUNT, "--format", "json"]
     : [...args, "--format", "json"];
-  log("Executing: op " + argv.join(" "));
+  log("Executing: op " + args[0] + " " + args[1]);
   const result = execFileSync("op", argv, {
     encoding: "utf-8",
     timeout: 30000,
@@ -121,8 +129,17 @@ function extractHtaccessCredentials(fields) {
   return null;
 }
 
+function getCachedItems() {
+  if (cachedItems && (Date.now() - cacheLoadedAt) > CACHE_TTL_MS) {
+    log("Cache TTL expired, clearing");
+    cachedItems = null;
+    cacheLoadedAt = 0;
+  }
+  return cachedItems;
+}
+
 function loadAllItems() {
-  log("Loading all .htaccess items from 1Password...");
+  log("Loading all tagged items from 1Password...");
   const items = opExec(["item", "list", "--tags", OP_TAG]);
   log("Found " + items.length + " tagged items");
 
@@ -146,16 +163,17 @@ function loadAllItems() {
           username: credentials.username,
           password: credentials.password
         });
-        log("  " + item.title + " -> " + domains.map((d) => "*." + d).join(", "));
+        log("  item loaded for: " + domains.map((d) => "*." + d).join(", "));
       } else {
-        log("  " + item.title + " -> no htaccess section found");
+        log("  item skipped (no htaccess section)");
       }
     } catch (error) {
-      log("  " + item.title + " -> ERROR: " + error.message);
+      log("  item error: " + error.message);
     }
   }
 
   cachedItems = results;
+  cacheLoadedAt = Date.now();
   return results;
 }
 
@@ -168,7 +186,8 @@ function handleMessage(message) {
     switch (message.action) {
       case "list":
       case "refresh":
-        cachedItems = null; // Force reload
+        cachedItems = null;
+        cacheLoadedAt = 0;
         const items = loadAllItems();
         sendMessage({ items });
         break;
@@ -178,7 +197,7 @@ function handleMessage(message) {
         break;
 
       case "ping":
-        sendMessage({ pong: true, cached: cachedItems?.length ?? 0 });
+        sendMessage({ pong: true, cached: getCachedItems()?.length ?? 0 });
         break;
 
       default:
@@ -204,12 +223,14 @@ function sharedSuffixLength(a, b) {
 function handleLookup(message) {
   const hostname = message.hostname;
 
-  if (!cachedItems) loadAllItems();
+  if (!getCachedItems()) loadAllItems();
+
+  const cached = getCachedItems();
 
   // 1. Exact hostname match
-  const exactMatch = cachedItems.find((item) => item.hostnames.includes(hostname));
+  const exactMatch = cached.find((item) => item.hostnames.includes(hostname));
   if (exactMatch) {
-    log("Exact match: " + hostname + " -> " + exactMatch.title);
+    log("Exact match for: " + hostname);
     sendMessage({ found: true, title: exactMatch.title, username: exactMatch.username, password: exactMatch.password });
     return;
   }
@@ -217,13 +238,13 @@ function handleLookup(message) {
   // 2. Domain-suffix match with longest-suffix wins
   const requestDomain = getDomain(hostname);
   if (requestDomain) {
-    const candidates = cachedItems.filter((item) =>
+    const candidates = cached.filter((item) =>
       item.hostnames.some((h) => getDomain(h) === requestDomain)
     );
 
     if (candidates.length === 1) {
       const match = candidates[0];
-      log("Domain match (unique): " + hostname + " -> " + match.title);
+      log("Domain match (unique) for: " + hostname);
       sendMessage({ found: true, title: match.title, username: match.username, password: match.password });
       return;
     }
@@ -246,7 +267,7 @@ function handleLookup(message) {
 
       // Clear winner: shares more than just the base domain
       if (bestMatch && bestScore > baseDomainParts) {
-        log("Domain match (best of " + candidates.length + "): " + hostname + " -> " + bestMatch.title + " (score " + bestScore + " > " + baseDomainParts + ")");
+        log("Domain match (best of " + candidates.length + ") for: " + hostname);
         sendMessage({ found: true, title: bestMatch.title, username: bestMatch.username, password: bestMatch.password });
         return;
       }
@@ -261,7 +282,7 @@ function handleLookup(message) {
         });
         if (hasMatchingDepth) {
           if (depthMatch) {
-            depthMatch = null; // Multiple items at same depth → still ambiguous
+            depthMatch = null;
             break;
           }
           depthMatch = item;
@@ -269,12 +290,12 @@ function handleLookup(message) {
       }
 
       if (depthMatch) {
-        log("Domain match (depth tiebreak): " + hostname + " (depth " + requestDepth + ") -> " + depthMatch.title);
+        log("Domain match (depth tiebreak) for: " + hostname);
         sendMessage({ found: true, title: depthMatch.title, username: depthMatch.username, password: depthMatch.password });
         return;
       }
 
-      log("Ambiguous: " + hostname + " has " + candidates.length + " candidates, no clear winner");
+      log("Ambiguous: " + hostname + " has " + candidates.length + " candidates");
     }
   }
 
@@ -286,7 +307,6 @@ function handleLookup(message) {
 
 log("Host started (persistent), PID=" + process.pid);
 
-// Keep process alive — don't exit on stdin end (Chrome keeps the pipe open)
 process.stdin.on("end", () => {
   log("stdin closed, exiting");
   process.exit(0);
