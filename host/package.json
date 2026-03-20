@@ -1,0 +1,22 @@
+{
+  "name": "passwordfiller-host",
+  "version": "1.0.0",
+  "main": "htpasswd-host.js",
+  "scripts": {
+    "build": "pkg htpasswd-host.js --targets node18-macos-arm64,node18-macos-x64 --out-path ../dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "tldts": "^7.0.26"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [],
+    "targets": ["node18-macos-arm64", "node18-macos-x64"]
+  }
+}

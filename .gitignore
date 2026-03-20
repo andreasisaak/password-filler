@@ -1,0 +1,5 @@
+extension.pem
+host/.env
+host/node_modules/
+dist/
+extension/.amo-upload-uuid

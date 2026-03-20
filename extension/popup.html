@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 320px; padding: 16px; font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: #1a1a1a; }
+    h2 { margin: 0 0 12px; font-size: 15px; }
+    .status { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12px; }
+    .status.ok { background: #e8f5e9; color: #2e7d32; }
+    .status.loading { background: #fff3e0; color: #e65100; }
+    .status.error { background: #ffebee; color: #c62828; }
+    button { width: 100%; padding: 10px; border: none; border-radius: 6px; background: #1a73e8; color: white; font-size: 13px; cursor: pointer; }
+    button:hover { background: #1557b0; }
+    button:disabled { background: #ccc; cursor: default; }
+    .hosts { margin-top: 12px; max-height: 200px; overflow-y: auto; font-size: 11px; color: #666; }
+    .hosts .item { padding: 6px 0; border-bottom: 1px solid #eee; font-size: 11px; line-height: 1.5; }
+    .hosts .item:last-child { border-bottom: none; }
+    .hosts .item strong { color: #1a1a1a; font-size: 12px; }
+    .hosts .item br + * { color: #888; font-family: monospace; font-size: 10px; }
+    .meta { font-size: 11px; color: #888; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Password Filler</h2>
+  <div id="status" class="status loading">Loading...</div>
+  <button id="refresh">Refresh from 1Password</button>
+  <div class="meta" id="meta"></div>
+  <div class="hosts" id="hosts"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

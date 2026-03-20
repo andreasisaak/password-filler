@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install host dependencies
+        run: npm install
+        working-directory: host
+
+      - name: Build standalone host binaries
+        run: npx pkg htpasswd-host.js --targets node18-macos-arm64,node18-macos-x64 --out-path ../dist
+        working-directory: host
+
+      - name: Create universal binary
+        run: lipo -create -output dist/passwordfiller-host dist/htpasswd-host-macos-arm64 dist/htpasswd-host-macos-x64
+
+      - name: Pack Chrome CRX
+        run: |
+          echo "${{ secrets.CHROME_EXTENSION_PEM }}" > extension.pem
+          npx crx3 pack extension --zip-output dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip \
+            --crx-output dist/password-filler-chrome-v${{ steps.version.outputs.version }}.crx \
+            --private-key extension.pem
+          rm extension.pem
+
+      - name: Sign Firefox extension
+        run: |
+          npm install -g web-ext
+          web-ext sign \
+            --source-dir extension \
+            --channel unlisted \
+            --api-key ${{ secrets.FIREFOX_API_KEY }} \
+            --api-secret ${{ secrets.FIREFOX_API_SECRET }} \
+            --artifacts-dir dist \
+            --filename password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
+
+      - name: Update Chrome update manifest
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          sed -i '' "s|url='[^']*'|url='https://github.com/andreasisaak/password-filler/releases/download/v${VERSION}/password-filler-chrome-v${VERSION}.crx'|" updates/chrome.xml
+          sed -i '' "s|version='[^']*'|version='${VERSION}'|" updates/chrome.xml
+
+      - name: Update Firefox update manifest
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('updates/firefox.json', 'utf8'));
+            m.addons['passwordfiller@app'].updates.unshift({
+              version: '${VERSION}',
+              update_link: 'https://github.com/andreasisaak/password-filler/releases/download/v${VERSION}/password-filler-firefox-v${VERSION}.xpi'
+            });
+            fs.writeFileSync('updates/firefox.json', JSON.stringify(m, null, 2) + '\n');
+          "
+
+      - name: Commit updated manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add updates/chrome.xml updates/firefox.json
+          git commit -m "chore: update manifests for v${{ steps.version.outputs.version }}"
+          git push origin HEAD:main
+
+      - name: Build .pkg installer
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          mkdir -p pkg-root/Library/Application\ Support/passwordfiller
+          cp dist/passwordfiller-host "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
+          chmod +x "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
+          pkgbuild \
+            --root pkg-root \
+            --identifier app.passwordfiller \
+            --version "$VERSION" \
+            --scripts installer \
+            dist/password-filler.pkg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/password-filler.pkg
+            dist/password-filler-chrome-v${{ steps.version.outputs.version }}.crx
+            dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip
+            dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
