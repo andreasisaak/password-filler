@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-SUPPORT_DIR="$HOME/Library/Application Support/passwordfiller"
+# Detect the actual logged-in user (script runs as root)
+CONSOLE_USER=$(stat -f "%Su" /dev/console)
+USER_HOME=$(eval echo ~"$CONSOLE_USER")
+
+SUPPORT_DIR="$USER_HOME/Library/Application Support/passwordfiller"
 BINARY_SRC="/Library/Application Support/passwordfiller/passwordfiller-host"
 BINARY_DEST="$SUPPORT_DIR/passwordfiller-host"
 CONFIG_PATH="$SUPPORT_DIR/config.json"
@@ -9,12 +13,12 @@ HOST_NAME="app.passwordfiller"
 EXTENSION_ID="hgelgpkdbkoipapbeblddhgfjlebckah"
 FIREFOX_EXT_ID="passwordfiller@app"
 
-CHROME_NMH="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-BRAVE_NMH="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
-FIREFOX_NMH="$HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
-CHROME_EXT="$HOME/Library/Application Support/Google/Chrome/External Extensions"
-BRAVE_EXT="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/External Extensions"
-FIREFOX_EXT="$HOME/Library/Application Support/Mozilla/Extensions/{ec8030f7-c20a-464f-9b0e-13a3a9e97384}"
+CHROME_NMH="$USER_HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+BRAVE_NMH="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+FIREFOX_NMH="$USER_HOME/Library/Application Support/Mozilla/NativeMessagingHosts"
+CHROME_EXT="$USER_HOME/Library/Application Support/Google/Chrome/External Extensions"
+BRAVE_EXT="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/External Extensions"
+FIREFOX_EXT="$USER_HOME/Library/Application Support/Mozilla/Extensions/{ec8030f7-c20a-464f-9b0e-13a3a9e97384}"
 
 # --- 1. Copy binary to user support dir ---
 mkdir -p "$SUPPORT_DIR"
@@ -32,9 +36,9 @@ fi
 
 # --- 3. Ask for 1Password account ---
 if [ ! -f "$CONFIG_PATH" ]; then
-  ACCOUNT=$(osascript -e 'display dialog "Enter your 1Password account URL:" default answer "team.1password.com" with title "Password Filler Setup"' -e 'text returned of result' 2>/dev/null || echo "")
+  ACCOUNT=$(sudo -u "$CONSOLE_USER" osascript -e 'display dialog "Enter your 1Password account URL:" default answer "team.1password.com" with title "Password Filler Setup"' -e 'text returned of result' 2>/dev/null || echo "")
   if [ -z "$ACCOUNT" ]; then
-    osascript -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning'
+    sudo -u "$CONSOLE_USER" osascript -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning'
     exit 1
   fi
   printf '{"op_account":"%s","op_tag":".htaccess"}' "$ACCOUNT" > "$CONFIG_PATH"
@@ -68,8 +72,8 @@ LATEST_XPI=$(curl -fsSL "https://api.github.com/repos/andreasisaak/password-fill
 if [ -n "$LATEST_XPI" ]; then
   XPI_PATH="/tmp/passwordfiller.xpi"
   curl -fsSL "$LATEST_XPI" -o "$XPI_PATH"
-  open -a Firefox "$XPI_PATH" 2>/dev/null || true
+  sudo -u "$CONSOLE_USER" open -a Firefox "$XPI_PATH" 2>/dev/null || true
 fi
 
 # --- 7. Done ---
-osascript -e 'display notification "Restart Chrome to activate the extension. Firefox will prompt you to install the add-on." with title "Password Filler installed"'
+sudo -u "$CONSOLE_USER" osascript -e 'display notification "Firefox will prompt you to install the add-on. Restart Chrome/Brave to activate the extension." with title "Password Filler installed"'
