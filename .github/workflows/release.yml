@@ -44,9 +44,11 @@ jobs:
         run: lipo -create -output dist/passwordfiller-host dist/htpasswd-host-arm64 dist/htpasswd-host-x64
 
       - name: Pack Chrome CRX
+        env:
+          CHROME_PEM: ${{ secrets.CHROME_EXTENSION_PEM }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          printf '%s' "${{ secrets.CHROME_EXTENSION_PEM }}" > extension.pem
+          echo "$CHROME_PEM" > extension.pem
           npx crx3 extension \
             -k extension.pem \
             -o dist/password-filler-chrome-v${VERSION}.crx \
@@ -54,15 +56,19 @@ jobs:
           rm extension.pem
 
       - name: Sign Firefox extension
+        env:
+          AMO_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
         run: |
+          VERSION=${{ steps.version.outputs.version }}
           npm install -g web-ext
           web-ext sign \
             --source-dir extension \
             --channel unlisted \
-            --api-key ${{ secrets.FIREFOX_API_KEY }} \
-            --api-secret ${{ secrets.FIREFOX_API_SECRET }} \
+            --api-key "$AMO_API_KEY" \
+            --api-secret "$AMO_API_SECRET" \
             --artifacts-dir dist
-          mv dist/*.xpi dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
+          mv dist/*.xpi dist/password-filler-firefox-v${VERSION}.xpi
 
       - name: Update Chrome update manifest
         run: |
