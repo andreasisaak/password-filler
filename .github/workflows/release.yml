@@ -37,12 +37,9 @@ jobs:
         run: npm install
         working-directory: host
 
-      - name: Build standalone host binaries
-        run: npx pkg htpasswd-host.js --targets node18-macos-arm64,node18-macos-x64 --out-path ../dist
+      - name: Build standalone host binary
+        run: npx pkg htpasswd-host.js --targets node18-macos-arm64 --output ../dist/passwordfiller-host
         working-directory: host
-
-      - name: Create universal binary
-        run: lipo -create -output dist/passwordfiller-host dist/htpasswd-host-arm64 dist/htpasswd-host-x64
 
       - name: Pack Chrome CRX
         env:
