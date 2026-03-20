@@ -20,7 +20,7 @@ BINARY_SRC="/Library/Application Support/passwordfiller/passwordfiller-host"
 BINARY_DEST="$SUPPORT_DIR/passwordfiller-host"
 CONFIG_PATH="$SUPPORT_DIR/config.json"
 HOST_NAME="app.passwordfiller"
-EXTENSION_ID="hgelgpkdbkoipapbeblddhgfjlebckah"
+EXTENSION_ID="ebcpahcihmnibmplnblcikgjiicmpcff"
 FIREFOX_EXT_ID="passwordfiller@app"
 
 CHROME_NMH="$USER_HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
@@ -113,7 +113,7 @@ EOF
 # --- 5. Register Chrome/Brave external extension ---
 /bin/mkdir -p "$CHROME_EXT" "$BRAVE_EXT"
 /usr/sbin/chown "$CONSOLE_USER" "$CHROME_EXT" "$BRAVE_EXT"
-EXT_JSON='{"external_update_url":"https://raw.githubusercontent.com/andreasisaak/password-filler/main/updates/chrome.xml"}'
+EXT_JSON='{"external_update_url":"https://clients2.google.com/service/update2/crx"}'
 printf '%s\n' "$EXT_JSON" > "$CHROME_EXT/$EXTENSION_ID.json"
 /usr/sbin/chown "$CONSOLE_USER" "$CHROME_EXT/$EXTENSION_ID.json"
 printf '%s\n' "$EXT_JSON" > "$BRAVE_EXT/$EXTENSION_ID.json"

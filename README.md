@@ -73,5 +73,15 @@ The extension and native host update automatically — no action required.
 **Check the log**
 
 ```bash
-tail -f /tmp/passwordfiller.log
+tail -f ~/Library/Logs/passwordfiller.log
 ```
+
+## Privacy
+
+Password Filler does not collect, transmit, or share any user data.
+
+- All credential lookups happen entirely on your device via the local 1Password CLI
+- No data is sent to any external server
+- Passwords are never written to disk by this extension
+- `chrome.storage.local` stores only the list of site names and domains — no passwords
+- A log file is written to `~/Library/Logs/passwordfiller.log` containing matched domain names for debugging — this file is only readable by you

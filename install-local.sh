@@ -10,7 +10,7 @@ BINARY_SRC="$DIST_DIR/passwordfiller-host"
 BINARY_DEST="$SUPPORT_DIR/passwordfiller-host"
 CONFIG_PATH="$SUPPORT_DIR/config.json"
 HOST_NAME="app.passwordfiller"
-EXTENSION_ID="hgelgpkdbkoipapbeblddhgfjlebckah"
+EXTENSION_ID="ebcpahcihmnibmplnblcikgjiicmpcff"
 FIREFOX_EXT_ID="passwordfiller@app"
 
 CHROME_NMH="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
@@ -81,7 +81,7 @@ echo "Native messaging registered"
 
 # --- 5. Chrome/Brave external extension ---
 mkdir -p "$CHROME_EXT" "$BRAVE_EXT"
-EXT_JSON='{"external_update_url":"https://raw.githubusercontent.com/andreasisaak/password-filler/main/updates/chrome.xml"}'
+EXT_JSON='{"external_update_url":"https://clients2.google.com/service/update2/crx"}
 echo "$EXT_JSON" > "$CHROME_EXT/$EXTENSION_ID.json"
 echo "$EXT_JSON" > "$BRAVE_EXT/$EXTENSION_ID.json"
 echo "Chrome/Brave external extension registered"
