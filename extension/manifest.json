@@ -3,7 +3,7 @@
   "name": "Password Filler",
   "version": "0.2.16",
   "description": "Auto-fills HTTP Basic Auth from 1Password",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoDYVL+8SAxlpeS8G+FPNzW+dc7PZqsb2Vto/gDnpNcc+B7EgUfVvJRsUM1ukhm6K0RGFrufkBu6PU50mIOiK2HJ8BzJFtSn1IqMQzGd0mZoXMTu6rIjlXsa/0lc349ncA6hhrBdWc7fJcEMKTnp0hhmqMOM7mtQ4UFiXxC5nyHu/cmapvROc6jDSYMLSs3nZynWMrRgsWJBZsiXo6GSm6EwQhSftgwWxMFvVAiy94olRVh4sv5VxqwwPXd98UEn8UgBnY1n+trR7O/rm0gXoGuM9CJPmWdN0fEW9UPKVOfny4oLfIcbNgxbU2rLBMSgsMYysa7DN+Z1gQPHMismcnwIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7egTpHz8MFQ3q6skZFEhfDeBqPnnapvIHEo2uuUlcXaH5B/4l16o8xL7Ad1gL3nXaPGGTs57C79Xtmus39uAGECUuI58N7JSa/dB3IwZCirWHvrZ6d5qrYDUtFLR2oC4Uu6AuXp2WMYs11s8MC00KJhCwmWcmIXTmqFTKyj4CByEmn2VmjTDRu66K6Lix5RhgBtC/Y5+l5hK4C/CGLToA9N9uPuJa6kei8QuMlfZHFdP/Zzablwo2p7aKpAZ9d/f/lqRsPvDMFbTEZDBr+dMT6pQfC0xVTPyolEWuqw5y6fgOMUinep6EWfwiuXVdO0+FxDYBZcxBfhaaPNxzgcUTQIDAQAB",
   "update_url": "https://raw.githubusercontent.com/andreasisaak/password-filler/main/updates/chrome.xml",
   "browser_specific_settings": {
     "gecko": {
