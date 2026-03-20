@@ -72,7 +72,9 @@ const OP_PATH = [
 ].join(":");
 
 function opExec(args) {
-  const argv = [...args, "--account", OP_ACCOUNT, "--format", "json"];
+  const argv = OP_ACCOUNT
+    ? [...args, "--account", OP_ACCOUNT, "--format", "json"]
+    : [...args, "--format", "json"];
   log("Executing: op " + argv.join(" "));
   const result = execFileSync("op", argv, {
     encoding: "utf-8",

@@ -36,9 +36,9 @@ fi
 
 # --- 3. Ask for 1Password account ---
 if [ ! -f "$CONFIG_PATH" ]; then
-  ACCOUNT=$(sudo -u "$CONSOLE_USER" osascript -e 'display dialog "Enter your 1Password account URL:" default answer "team.1password.com" with title "Password Filler Setup"' -e 'text returned of result' 2>/dev/null || echo "")
+  ACCOUNT=$(launchctl asuser "$(id -u "$CONSOLE_USER")" sudo -u "$CONSOLE_USER" osascript -e 'display dialog "Enter your 1Password account URL:" default answer "team.1password.com" with title "Password Filler Setup"' -e 'text returned of result' 2>/dev/null || echo "")
   if [ -z "$ACCOUNT" ]; then
-    sudo -u "$CONSOLE_USER" osascript -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning'
+    launchctl asuser "$(id -u "$CONSOLE_USER")" sudo -u "$CONSOLE_USER" osascript -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning'
     exit 1
   fi
   printf '{"op_account":"%s","op_tag":".htaccess"}' "$ACCOUNT" > "$CONFIG_PATH"
@@ -72,8 +72,9 @@ LATEST_XPI=$(curl -fsSL "https://api.github.com/repos/andreasisaak/password-fill
 if [ -n "$LATEST_XPI" ]; then
   XPI_PATH="/tmp/passwordfiller.xpi"
   curl -fsSL "$LATEST_XPI" -o "$XPI_PATH"
-  sudo -u "$CONSOLE_USER" open -a Firefox "$XPI_PATH" 2>/dev/null || true
+  CONSOLE_UID=$(id -u "$CONSOLE_USER")
+  launchctl asuser "$CONSOLE_UID" sudo -u "$CONSOLE_USER" open -a Firefox "$XPI_PATH" 2>/dev/null || true
 fi
 
 # --- 7. Done ---
-sudo -u "$CONSOLE_USER" osascript -e 'display notification "Firefox will prompt you to install the add-on. Restart Chrome/Brave to activate the extension." with title "Password Filler installed"'
+launchctl asuser "$(id -u "$CONSOLE_USER")" sudo -u "$CONSOLE_USER" osascript -e 'display notification "Firefox will prompt you to install the add-on. Restart Chrome/Brave to activate the extension." with title "Password Filler installed"'
