@@ -45,10 +45,12 @@ jobs:
 
       - name: Pack Chrome CRX
         run: |
-          echo "${{ secrets.CHROME_EXTENSION_PEM }}" > extension.pem
-          npx crx3 pack extension --zip-output dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip \
-            --crx-output dist/password-filler-chrome-v${{ steps.version.outputs.version }}.crx \
-            --private-key extension.pem
+          VERSION=${{ steps.version.outputs.version }}
+          printf '%s' "${{ secrets.CHROME_EXTENSION_PEM }}" > extension.pem
+          npx crx3 extension \
+            -k extension.pem \
+            -o dist/password-filler-chrome-v${VERSION}.crx \
+            -z dist/password-filler-chrome-v${VERSION}.zip
           rm extension.pem
 
       - name: Sign Firefox extension
@@ -85,9 +87,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add updates/chrome.xml updates/firefox.json
+          git fetch origin main
+          git checkout main
+          git add updates/chrome.xml updates/firefox.json extension/manifest.json
           git commit -m "chore: update manifests for v${{ steps.version.outputs.version }}"
-          git push origin HEAD:main
+          git push origin main
 
       - name: Build .pkg installer
         run: |
