@@ -34,9 +34,15 @@ if (manifest.background?.scripts) {
 }
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
+const { execFileSync } = require('child_process');
 const keyPath = path.resolve('extension.pem');
 const crxPath = path.resolve(`dist/password-filler-cws-v${version}.crx`);
+const zipPath = path.resolve(`dist/password-filler-cws-v${version}.zip`);
 
 crx3([tmpDir], { keyPath, crxPath })
-  .then(() => console.log('CWS CRX packed:', crxPath))
+  .then(() => {
+    console.log('CWS CRX packed:', crxPath);
+    execFileSync('zip', ['-r', zipPath, '.'], { cwd: tmpDir });
+    console.log('CWS ZIP packed:', zipPath);
+  })
   .catch(e => { console.error('Failed:', e.message); process.exit(1); });

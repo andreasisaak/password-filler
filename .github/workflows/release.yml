@@ -120,4 +120,5 @@ jobs:
             dist/password-filler-chrome-v${{ steps.version.outputs.version }}.crx
             dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip
             dist/password-filler-cws-v${{ steps.version.outputs.version }}.crx
+            dist/password-filler-cws-v${{ steps.version.outputs.version }}.zip
             dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
