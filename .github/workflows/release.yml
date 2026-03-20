@@ -48,10 +48,9 @@ jobs:
           CHROME_PEM: ${{ secrets.CHROME_EXTENSION_PEM }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          node -e "require('fs').writeFileSync('extension.pem', process.env.CHROME_PEM)"
           npm install --no-save crx3
           node scripts/pack-crx.js ${VERSION}
-          rm extension.pem
+          rm -f extension.pem
 
       - name: Sign Firefox extension
         env:

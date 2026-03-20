@@ -13,15 +13,25 @@ const keyPath = path.resolve('extension.pem');
 const crxPath = path.resolve(`dist/password-filler-chrome-v${version}.crx`);
 const zipPath = path.resolve(`dist/password-filler-chrome-v${version}.zip`);
 
+// Write PEM from env, converting literal \n to real newlines (GitHub Secrets quirk)
+const rawPem = (process.env.CHROME_PEM || '').replace(/\\n/g, '\n');
+if (rawPem.length > 100) {
+  fs.writeFileSync(keyPath, rawPem);
+  console.log(`PEM written: ${rawPem.length} bytes`);
+}
+
 if (!fs.existsSync(keyPath)) {
   console.error('Key file not found:', keyPath);
   process.exit(1);
 }
 
-const keySize = fs.statSync(keyPath).size;
-console.log(`Key file: ${keyPath} (${keySize} bytes)`);
-if (keySize < 100) {
-  console.error('Key file is empty or invalid');
+// Validate key is parseable
+const { createPrivateKey } = require('crypto');
+try {
+  const key = createPrivateKey({ key: fs.readFileSync(keyPath), format: 'pem' });
+  console.log('Key type:', key.asymmetricKeyType, '— valid');
+} catch (e) {
+  console.error('Invalid private key:', e.message);
   process.exit(1);
 }
 
