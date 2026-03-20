@@ -50,6 +50,7 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           npm install --no-save crx3
           node scripts/pack-crx.js ${VERSION}
+          node scripts/build-cws-crx.js ${VERSION}
           rm -f extension.pem
 
       - name: Sign Firefox extension
@@ -113,4 +114,5 @@ jobs:
             dist/password-filler.pkg
             dist/password-filler-chrome-v${{ steps.version.outputs.version }}.crx
             dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip
+            dist/password-filler-cws-v${{ steps.version.outputs.version }}.crx
             dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
