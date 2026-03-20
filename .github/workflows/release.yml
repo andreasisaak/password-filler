@@ -48,9 +48,9 @@ jobs:
           CHROME_PEM: ${{ secrets.CHROME_EXTENSION_PEM }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          echo "$CHROME_PEM" > extension.pem
+          node -e "require('fs').writeFileSync('extension.pem', process.env.CHROME_PEM)"
           npx crx3 extension \
-            -k extension.pem \
+            --key-path extension.pem \
             -o dist/password-filler-chrome-v${VERSION}.crx \
             -z dist/password-filler-chrome-v${VERSION}.zip
           rm extension.pem
