@@ -49,8 +49,8 @@ jobs:
             --channel unlisted \
             --api-key ${{ secrets.FIREFOX_API_KEY }} \
             --api-secret ${{ secrets.FIREFOX_API_SECRET }} \
-            --artifacts-dir dist \
-            --filename password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
+            --artifacts-dir dist
+          mv dist/*.xpi dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
 
       - name: Update Chrome update manifest
         run: |
