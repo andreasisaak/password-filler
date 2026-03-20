@@ -64,11 +64,12 @@ echo "$EXT_JSON" > "$CHROME_EXT/$EXTENSION_ID.json"
 echo "$EXT_JSON" > "$BRAVE_EXT/$EXTENSION_ID.json"
 
 # --- 6. Install Firefox extension ---
-mkdir -p "$FIREFOX_EXT"
 LATEST_XPI=$(curl -fsSL "https://api.github.com/repos/andreasisaak/password-filler/releases/latest" | grep '"browser_download_url"' | grep '\.xpi' | head -1 | sed 's/.*"browser_download_url": "\(.*\)".*/\1/')
 if [ -n "$LATEST_XPI" ]; then
-  curl -fsSL "$LATEST_XPI" -o "$FIREFOX_EXT/$FIREFOX_EXT_ID.xpi"
+  XPI_PATH="/tmp/passwordfiller.xpi"
+  curl -fsSL "$LATEST_XPI" -o "$XPI_PATH"
+  open -a Firefox "$XPI_PATH" 2>/dev/null || true
 fi
 
 # --- 7. Done ---
-osascript -e 'display notification "Restart your browser to activate the extension." with title "Password Filler installed"'
+osascript -e 'display notification "Restart Chrome to activate the extension. Firefox will prompt you to install the add-on." with title "Password Filler installed"'
