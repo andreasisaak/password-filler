@@ -37,8 +37,10 @@ jobs:
         run: npm install
         working-directory: host
 
-      - name: Build standalone host binary
-        run: npx pkg htpasswd-host.js --targets node18-macos-arm64 --output ../dist/passwordfiller-host
+      - name: Build standalone host binaries
+        run: |
+          npx pkg htpasswd-host.js --targets node18-macos-arm64 --output ../dist/passwordfiller-host
+          npx pkg htpasswd-host.js --targets node18-linux-x64 --output ../dist/passwordfiller-host-linux
         working-directory: host
 
       - name: Pack Chrome CRX
@@ -98,7 +100,7 @@ jobs:
           git commit -m "chore: update manifests for v${{ steps.version.outputs.version }}"
           git push origin main
 
-      - name: Build .pkg installer
+      - name: Build .pkg installer (macOS)
         run: |
           VERSION=${{ steps.version.outputs.version }}
           mkdir -p pkg-root/Library/Application\ Support/passwordfiller
@@ -112,6 +114,15 @@ jobs:
             --scripts installer \
             dist/password-filler.pkg
 
+      - name: Build Linux tarball
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          mkdir -p dist/password-filler-linux
+          cp dist/passwordfiller-host-linux dist/password-filler-linux/
+          cp installer/install-linux.sh dist/password-filler-linux/install.sh
+          chmod +x dist/password-filler-linux/install.sh dist/password-filler-linux/passwordfiller-host-linux
+          tar -czf "dist/password-filler-linux-v${VERSION}.tar.gz" -C dist password-filler-linux
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -121,4 +132,5 @@ jobs:
             dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip
             dist/password-filler-cws-v${{ steps.version.outputs.version }}.crx
             dist/password-filler-cws-v${{ steps.version.outputs.version }}.zip
+            dist/password-filler-linux-v${{ steps.version.outputs.version }}.tar.gz
             dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi

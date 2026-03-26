@@ -12,16 +12,24 @@ Chrome/Firefox/Brave extension that auto-fills HTTP Basic Auth dialogs from 1Pas
 ## Installation
 
 **Prerequisites:**
+- macOS or Linux
 - [1Password desktop app](https://1password.com/downloads) — signed in to your account
 - Chrome, Firefox, or Brave
 
-**Steps:**
+### macOS
 
-1. Download `password-filler.pkg` from the [latest release](https://github.com/andreasisaak/password-filler/releases/latest)
-2. Double-click and run the installer — it will ask for your 1Password account URL (e.g. `yourteam.1password.com`) and install everything automatically
+1. Download `password-filler.pkg` from the [latest release](https://github.com/andreasisaak/password-filler/releases/latest) and run the installer — it sets up the native host, asks for your 1Password account URL, and installs the Firefox extension automatically
+2. **Chrome/Brave:** Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/password-filler/ebcpahcihmnibmplnblcikgjiicmpcff)
 3. In 1Password: **Settings → Developer → Enable "Integrate with 1Password CLI"**
-4. Restart your browser — the extension installs itself automatically
-5. Click the extension icon → **Refresh from 1Password** (Touch ID prompt appears once)
+4. Click the extension icon → **Refresh from 1Password** (Touch ID prompt appears once)
+
+### Linux
+
+1. Download `password-filler-linux-v*.tar.gz` from the [latest release](https://github.com/andreasisaak/password-filler/releases/latest) and extract it
+2. Run `./install.sh` — it sets up the native host, asks for your 1Password account URL, and opens the Firefox extension
+3. **Chrome/Brave:** Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/password-filler/ebcpahcihmnibmplnblcikgjiicmpcff)
+4. In 1Password: **Settings → Developer → Enable "Integrate with 1Password CLI"**
+5. Click the extension icon → **Refresh from 1Password**
 
 ## 1Password configuration
 
@@ -48,16 +56,19 @@ Credentials are matched in three stages:
 
 ## Updates
 
-The extension and native host update automatically — no action required.
+- **Firefox:** Updates automatically via the signed XPI
+- **Chrome/Brave:** Updates automatically via the Chrome Web Store
+- **Native host (macOS):** Re-run the latest `password-filler.pkg`
+- **Native host (Linux):** Re-download and run `install.sh`
 
 ## Supported browsers
 
-| Browser | Status |
-|---------|--------|
-| Chrome  | Supported |
-| Brave   | Supported |
-| Firefox | Supported |
-| Safari  | Not supported (`webRequest.onAuthRequired` unavailable in MV3) |
+| Browser | macOS | Linux |
+|---------|-------|-------|
+| Chrome  | Supported | Supported |
+| Brave   | Supported | Supported |
+| Firefox | Supported | Supported |
+| Safari  | Not supported | — |
 
 ## Troubleshooting
 
@@ -73,7 +84,11 @@ The extension and native host update automatically — no action required.
 **Check the log**
 
 ```bash
+# macOS
 tail -f ~/Library/Logs/passwordfiller.log
+
+# Linux
+tail -f ~/.config/passwordfiller/passwordfiller.log
 ```
 
 ## Privacy

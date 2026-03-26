@@ -5,7 +5,12 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 const { getDomain } = require("tldts");
 
-const CONFIG_DIR = path.join(require("os").homedir(), "Library", "Application Support", "passwordfiller");
+const os = require("os");
+const IS_MAC = process.platform === "darwin";
+
+const CONFIG_DIR = IS_MAC
+  ? path.join(os.homedir(), "Library", "Application Support", "passwordfiller")
+  : path.join(os.homedir(), ".config", "passwordfiller");
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 
 let config = {};
@@ -13,8 +18,9 @@ if (fs.existsSync(CONFIG_PATH)) {
   config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 }
 
-// Log to ~/Library/Logs/ with restricted permissions — not world-readable /tmp
-const LOG_FILE = path.join(require("os").homedir(), "Library", "Logs", "passwordfiller.log");
+const LOG_FILE = IS_MAC
+  ? path.join(os.homedir(), "Library", "Logs", "passwordfiller.log")
+  : path.join(CONFIG_DIR, "passwordfiller.log");
 const OP_ACCOUNT = config.op_account;
 const OP_TAG = config.op_tag || ".htaccess";
 const SECTION_PATTERN = /(htaccess|basicauth|basic.?auth|htpasswd|webuser)/i;
