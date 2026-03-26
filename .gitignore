@@ -1,5 +1,7 @@
 extension.pem
 host/.env
+node_modules/
 host/node_modules/
 dist/
 extension/.amo-upload-uuid
+host/run-host.sh
