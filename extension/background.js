@@ -142,6 +142,8 @@ async function lookupCredentials(url) {
     return credentials;
   }
 
+  // Cache negative result to avoid repeated host lookups for unknown domains
+  credentialCache.set(hostname, null);
   return null;
 }
 

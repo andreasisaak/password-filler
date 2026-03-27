@@ -2,7 +2,10 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execFileSync } = require("child_process");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+
+const execFileAsync = promisify(execFile);
 const { getDomain } = require("tldts");
 
 const os = require("os");
@@ -68,12 +71,24 @@ function processInput() {
 
     try {
       const message = JSON.parse(messageBody.toString());
-      handleMessage(message);
+      enqueueMessage(message);
     } catch (error) {
       log("Parse error: " + error.message);
       sendMessage({ error: "Invalid message: " + error.message });
     }
   }
+}
+
+// Serial message queue — ensures one message is fully handled before the next,
+// preserving the FIFO response order expected by the extension.
+let messageQueue = Promise.resolve();
+
+function enqueueMessage(message) {
+  messageQueue = messageQueue
+    .then(() => handleMessage(message))
+    .catch((error) => {
+      log("Unhandled error in message queue: " + error.message);
+    });
 }
 
 // --- 1Password CLI ---
@@ -85,17 +100,17 @@ const OP_PATH = [
   process.env.PATH || ""
 ].join(":");
 
-function opExec(args) {
+async function opExec(args) {
   const argv = OP_ACCOUNT
     ? [...args, "--account", OP_ACCOUNT, "--format", "json"]
     : [...args, "--format", "json"];
   log("Executing: op " + args[0] + " " + args[1]);
-  const result = execFileSync("op", argv, {
+  const { stdout } = await execFileAsync("op", argv, {
     encoding: "utf-8",
     timeout: 30000,
     env: { ...process.env, PATH: OP_PATH }
   });
-  return JSON.parse(result);
+  return JSON.parse(stdout);
 }
 
 function extractHostnames(urls) {
@@ -144,62 +159,66 @@ function getCachedItems() {
   return cachedItems;
 }
 
-function loadAllItems() {
+async function loadAllItems() {
   log("Loading all tagged items from 1Password...");
-  const items = opExec(["item", "list", "--tags", OP_TAG]);
-  log("Found " + items.length + " tagged items");
+  const items = await opExec(["item", "list", "--tags", OP_TAG]);
+  log("Found " + items.length + " tagged items, fetching details in parallel...");
 
-  const results = [];
+  const itemsWithHostnames = items
+    .map((item) => ({ item, hostnames: extractHostnames(item.urls) }))
+    .filter(({ hostnames }) => hostnames.length > 0);
 
-  for (const item of items) {
-    const hostnames = extractHostnames(item.urls);
-    if (hostnames.length === 0) continue;
+  const results = await Promise.all(
+    itemsWithHostnames.map(async ({ item, hostnames }) => {
+      try {
+        const fullItem = await opExec(["item", "get", item.id]);
+        const credentials = extractHtaccessCredentials(fullItem.fields || []);
 
-    try {
-      const fullItem = opExec(["item", "get", item.id]);
-      const credentials = extractHtaccessCredentials(fullItem.fields || []);
+        if (credentials) {
+          const domains = [...new Set(hostnames.map((h) => getDomain(h)).filter(Boolean))];
+          log("  item loaded for: " + domains.map((d) => "*." + d).join(", "));
+          return {
+            itemId: item.id,
+            title: item.title,
+            hostnames,
+            domains,
+            username: credentials.username,
+            password: credentials.password
+          };
+        }
 
-      if (credentials) {
-        const domains = [...new Set(hostnames.map((h) => getDomain(h)).filter(Boolean))];
-        results.push({
-          itemId: item.id,
-          title: item.title,
-          hostnames: hostnames,
-          domains: domains,
-          username: credentials.username,
-          password: credentials.password
-        });
-        log("  item loaded for: " + domains.map((d) => "*." + d).join(", "));
-      } else {
         log("  item skipped (no htaccess section)");
+        return null;
+      } catch (error) {
+        log("  item error: " + error.message);
+        return null;
       }
-    } catch (error) {
-      log("  item error: " + error.message);
-    }
-  }
+    })
+  );
 
-  cachedItems = results;
+  cachedItems = results.filter(Boolean);
   cacheLoadedAt = Date.now();
-  return results;
+  return cachedItems;
 }
 
 // --- Message Handlers ---
 
-function handleMessage(message) {
+async function handleMessage(message) {
   log("Received: " + message.action);
 
   try {
     switch (message.action) {
       case "list":
-      case "refresh":
+      case "refresh": {
         cachedItems = null;
         cacheLoadedAt = 0;
-        const items = loadAllItems();
+        const items = await loadAllItems();
         sendMessage({ items });
         break;
+      }
 
       case "lookup":
-        handleLookup(message);
+        await handleLookup(message);
         break;
 
       case "ping":
@@ -226,10 +245,10 @@ function sharedSuffixLength(a, b) {
   return shared;
 }
 
-function handleLookup(message) {
+async function handleLookup(message) {
   const hostname = message.hostname;
 
-  if (!getCachedItems()) loadAllItems();
+  if (!getCachedItems()) await loadAllItems();
 
   const cached = getCachedItems();
 
