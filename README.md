@@ -14,6 +14,7 @@ Chrome/Firefox/Brave extension that auto-fills HTTP Basic Auth dialogs from 1Pas
 **Prerequisites:**
 - macOS or Linux
 - [1Password desktop app](https://1password.com/downloads) — signed in to your account
+- [1Password CLI](https://developer.1password.com/docs/cli/get-started/#install) — the macOS installer installs it automatically if missing
 - Chrome, Firefox, or Brave
 
 ### macOS
