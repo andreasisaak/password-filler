@@ -162,17 +162,7 @@ jobs:
           cp installer/postinst-linux.sh "$DEB_ROOT/DEBIAN/postinst"
           chmod +x "$DEB_ROOT/DEBIAN/postinst"
 
-          cat > "$DEB_ROOT/DEBIAN/control" <<EOF
-Package: password-filler
-Version: ${VERSION}
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: andreasisaak
-Description: Auto-fills HTTP Basic Auth dialogs from 1Password
- Chrome/Firefox/Brave extension companion that reads credentials
- from 1Password and fills HTTP Basic Auth prompts automatically.
-EOF
+          printf 'Package: password-filler\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: andreasisaak\nDescription: Auto-fills HTTP Basic Auth dialogs from 1Password\n Chrome/Firefox/Brave extension companion that reads credentials\n from 1Password and fills HTTP Basic Auth prompts automatically.\n' "$VERSION" > "$DEB_ROOT/DEBIAN/control"
 
           dpkg-deb --build "$DEB_ROOT" "dist/password-filler-linux-v${VERSION}.deb"
 
