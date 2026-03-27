@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Password Filler",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "description": "Auto-fills HTTP Basic Auth from 1Password",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7egTpHz8MFQ3q6skZFEhfDeBqPnnapvIHEo2uuUlcXaH5B/4l16o8xL7Ad1gL3nXaPGGTs57C79Xtmus39uAGECUuI58N7JSa/dB3IwZCirWHvrZ6d5qrYDUtFLR2oC4Uu6AuXp2WMYs11s8MC00KJhCwmWcmIXTmqFTKyj4CByEmn2VmjTDRu66K6Lix5RhgBtC/Y5+l5hK4C/CGLToA9N9uPuJa6kei8QuMlfZHFdP/Zzablwo2p7aKpAZ9d/f/lqRsPvDMFbTEZDBr+dMT6pQfC0xVTPyolEWuqw5y6fgOMUinep6EWfwiuXVdO0+FxDYBZcxBfhaaPNxzgcUTQIDAQAB",
   "update_url": "https://raw.githubusercontent.com/andreasisaak/password-filler/main/updates/chrome.xml",
