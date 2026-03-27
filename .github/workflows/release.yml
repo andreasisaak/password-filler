@@ -37,10 +37,8 @@ jobs:
         run: npm install
         working-directory: host
 
-      - name: Build standalone host binaries
-        run: |
-          npx pkg htpasswd-host.js --targets node18-macos-arm64 --output ../dist/passwordfiller-host
-          npx pkg htpasswd-host.js --targets node18-linux-x64 --output ../dist/passwordfiller-host-linux
+      - name: Build standalone host binary
+        run: npx pkg htpasswd-host.js --targets node18-macos-arm64 --output ../dist/passwordfiller-host
         working-directory: host
 
       - name: Pack Chrome CRX
@@ -114,15 +112,6 @@ jobs:
             --scripts installer \
             dist/password-filler.pkg
 
-      - name: Build Linux tarball
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          mkdir -p dist/password-filler-linux
-          cp dist/passwordfiller-host-linux dist/password-filler-linux/
-          cp installer/install-linux.sh dist/password-filler-linux/install.sh
-          chmod +x dist/password-filler-linux/install.sh dist/password-filler-linux/passwordfiller-host-linux
-          tar -czf "dist/password-filler-linux-v${VERSION}.tar.gz" -C dist password-filler-linux
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -132,5 +121,73 @@ jobs:
             dist/password-filler-chrome-v${{ steps.version.outputs.version }}.zip
             dist/password-filler-cws-v${{ steps.version.outputs.version }}.crx
             dist/password-filler-cws-v${{ steps.version.outputs.version }}.zip
-            dist/password-filler-linux-v${{ steps.version.outputs.version }}.tar.gz
             dist/password-filler-firefox-v${{ steps.version.outputs.version }}.xpi
+
+  linux:
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Install host dependencies
+        run: npm install
+        working-directory: host
+
+      - name: Build Linux binary
+        run: npx pkg htpasswd-host.js --targets node18-linux-x64 --output ../dist/passwordfiller-host-linux
+        working-directory: host
+
+      - name: Build .deb package
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          DEB_ROOT="dist/deb-root"
+
+          mkdir -p "$DEB_ROOT/DEBIAN"
+          mkdir -p "$DEB_ROOT/usr/lib/passwordfiller"
+
+          cp dist/passwordfiller-host-linux "$DEB_ROOT/usr/lib/passwordfiller/passwordfiller-host"
+          chmod +x "$DEB_ROOT/usr/lib/passwordfiller/passwordfiller-host"
+
+          cp installer/postinst-linux.sh "$DEB_ROOT/DEBIAN/postinst"
+          chmod +x "$DEB_ROOT/DEBIAN/postinst"
+
+          cat > "$DEB_ROOT/DEBIAN/control" <<EOF
+          Package: password-filler
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: andreasisaak
+          Description: Auto-fills HTTP Basic Auth dialogs from 1Password
+           Chrome/Firefox/Brave extension companion that reads credentials
+           from 1Password and fills HTTP Basic Auth prompts automatically.
+          EOF
+
+          dpkg-deb --build "$DEB_ROOT" "dist/password-filler-linux-v${VERSION}.deb"
+
+      - name: Build Linux tarball
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          mkdir -p dist/password-filler-linux
+          cp dist/passwordfiller-host-linux dist/password-filler-linux/passwordfiller-host-linux
+          cp installer/install-linux.sh dist/password-filler-linux/install.sh
+          chmod +x dist/password-filler-linux/install.sh dist/password-filler-linux/passwordfiller-host-linux
+          tar -czf "dist/password-filler-linux-v${VERSION}.tar.gz" -C dist password-filler-linux
+
+      - name: Upload Linux assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/password-filler-linux-v${{ steps.version.outputs.version }}.deb
+            dist/password-filler-linux-v${{ steps.version.outputs.version }}.tar.gz
