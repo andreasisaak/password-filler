@@ -104,6 +104,12 @@ jobs:
           mkdir -p pkg-root/Library/Application\ Support/passwordfiller
           cp dist/passwordfiller-host "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
           chmod +x "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
+
+          # Bundle op CLI so it's available offline, no download at install time
+          brew install 1password-cli
+          cp "$(brew --prefix)/bin/op" "pkg-root/Library/Application Support/passwordfiller/op"
+          chmod +x "pkg-root/Library/Application Support/passwordfiller/op"
+
           chmod +x installer/postinstall
           pkgbuild \
             --root pkg-root \

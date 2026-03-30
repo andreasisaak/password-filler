@@ -35,28 +35,7 @@ BRAVE_EXT="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/Ex
 /bin/chmod +x "$BINARY_DEST"
 /usr/sbin/chown -R "$CONSOLE_USER" "$SUPPORT_DIR"
 
-# --- 2. Install op CLI if missing (non-fatal, signature-verified) ---
-OP_BIN=""
-for op_path in /opt/homebrew/bin/op /usr/local/bin/op /opt/local/bin/op; do
-  if [ -x "$op_path" ]; then
-    OP_BIN="$op_path"
-    break
-  fi
-done
-
-if [ -z "$OP_BIN" ]; then
-  OP_VERSION="2.30.3"
-  OP_PKG=$(/usr/bin/mktemp /tmp/op-install.XXXXXX.pkg)
-  if /usr/bin/curl --fail -sSL \
-    "https://cache.agilebits.com/dist/1P/op2/pkg/v${OP_VERSION}/op_darwin_universal_v${OP_VERSION}.pkg" \
-    -o "$OP_PKG" 2>/dev/null; then
-    # Verify signature before running as root
-    if /usr/sbin/pkgutil --check-signature "$OP_PKG" 2>/dev/null | /usr/bin/grep -q "AgileBits Inc\."; then
-      /usr/sbin/installer -pkg "$OP_PKG" -target / 2>/dev/null || true
-    fi
-  fi
-  /bin/rm -f "$OP_PKG"
-fi
+# --- 2. op CLI is bundled in the pkg payload at $SUPPORT_DIR/op (no download needed) ---
 
 # --- 3. Ask for 1Password account ---
 if [ ! -f "$CONFIG_PATH" ]; then
@@ -137,7 +116,11 @@ fi
 if [ -n "$LATEST_XPI" ]; then
   XPI_PATH=$(/usr/bin/mktemp /tmp/passwordfiller.XXXXXX.xpi)
   if /usr/bin/curl --fail -sSL "$LATEST_XPI" -o "$XPI_PATH" 2>/dev/null; then
+    # Make readable by the console user (mktemp creates 600/root-owned)
+    /bin/chmod 644 "$XPI_PATH"
     /bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/open -a Firefox "$XPI_PATH" 2>/dev/null || true
+    # Give Firefox time to read the file before we delete it (open is non-blocking)
+    /bin/sleep 5
   fi
   /bin/rm -f "$XPI_PATH"
 fi

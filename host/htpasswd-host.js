@@ -97,6 +97,8 @@ const OP_PATH = [
   "/opt/homebrew/bin",
   "/usr/local/bin",
   "/opt/local/bin",
+  // Bundled fallback installed by the .pkg payload
+  "/Library/Application Support/passwordfiller",
   process.env.PATH || ""
 ].join(":");
 
