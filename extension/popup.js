@@ -36,7 +36,8 @@ function render(data) {
   } else {
     statusEl.textContent = data.count + " hostnames cached — refresh for details";
   }
-  metaEl.textContent = "Last refresh: " + new Date(data.timestamp).toLocaleString("de-DE");
+  metaEl.innerHTML = "Last refresh: " + new Date(data.timestamp).toLocaleString("de-DE") +
+    (data.opAccount ? "<br>" + data.opAccount : "");
 
   if (items.length === 0) {
     hostsEl.innerHTML = "";

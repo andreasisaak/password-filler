@@ -8,6 +8,7 @@ let refreshInProgress = false;
 // Persistent native messaging port
 let port = null;
 let pendingCallbacks = [];
+let opAccount = "";
 
 // Track pending auth requests to prevent infinite loops
 const pendingRequests = new Map(); // requestId → timestamp
@@ -153,15 +154,16 @@ let cachedItemsSummary = [];
 
 async function saveCache() {
   // Only save display metadata — never persist credentials to disk
-  await chrome.storage.local.set({ cacheTimestamp, items: cachedItemsSummary });
+  await chrome.storage.local.set({ cacheTimestamp, items: cachedItemsSummary, opAccount });
   console.log("[htpasswd] Cache metadata saved");
 }
 
 async function loadCache() {
-  const result = await chrome.storage.local.get(["cacheTimestamp", "items"]);
+  const result = await chrome.storage.local.get(["cacheTimestamp", "items", "opAccount"]);
   if (result.cacheTimestamp) {
     cacheTimestamp = result.cacheTimestamp;
     cachedItemsSummary = result.items || [];
+    opAccount = result.opAccount || "";
     // credentialCache is intentionally NOT restored from storage
     console.log("[htpasswd] Cache metadata loaded (credentials will be fetched on demand)");
     return true;
@@ -200,6 +202,12 @@ async function refreshCache() {
       }
       cacheTimestamp = Date.now();
       console.log("[htpasswd] Cached", credentialCache.size, "hostnames from", response.items.length, "items");
+
+      const configResponse = await sendNativeMessage({ action: "config" });
+      if (configResponse?.op_account) {
+        opAccount = configResponse.op_account;
+      }
+
       await saveCache();
     } else if (response?.error) {
       console.error("[htpasswd] Refresh error:", response.error);
@@ -216,7 +224,8 @@ function getStatus() {
     count: credentialCache.size,
     timestamp: cacheTimestamp,
     items: cachedItemsSummary,
-    refreshing: refreshInProgress
+    refreshing: refreshInProgress,
+    opAccount
   };
 }
 

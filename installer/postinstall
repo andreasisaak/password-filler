@@ -43,26 +43,32 @@ BRAVE_EXT="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/Ex
 
 # --- 2. op CLI is bundled in the pkg payload at $SUPPORT_DIR/op (no download needed) ---
 
-# --- 3. Ask for 1Password account ---
-if [ ! -f "$CONFIG_PATH" ]; then
-  ACCOUNT=$(/bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
-    -e 'display dialog "Enter your 1Password account URL:" default answer "team.1password.com" with title "Password Filler Setup"' \
-    -e 'text returned of result' 2>/dev/null || echo "")
-  if [ -z "$ACCOUNT" ]; then
-    /bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
-      -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning' 2>/dev/null || true
-    exit 1
-  fi
-  # Use python3 for safe JSON encoding; fall back to sed if python3 fails or is unavailable
-  if [ -x "/usr/bin/python3" ] && /usr/bin/python3 -c \
-    "import sys, json; print(json.dumps({'op_account': sys.argv[1], 'op_tag': '.htaccess'}))" \
-    "$ACCOUNT" > "$CONFIG_PATH" 2>/dev/null; then
-    :  # success
-  else
-    ACCOUNT_ESC=$(printf '%s' "$ACCOUNT" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
-    printf '{"op_account":"%s","op_tag":".htaccess"}\n' "$ACCOUNT_ESC" > "$CONFIG_PATH"
-  fi
-  /bin/chmod 600 "$CONFIG_PATH"
+# --- 3. Ask for 1Password account (always shown — pre-filled from existing config) ---
+CURRENT_ACCOUNT="team.1password.com"
+if [ -f "$CONFIG_PATH" ] && [ -x "/usr/bin/python3" ]; then
+  CURRENT_ACCOUNT=$(/usr/bin/python3 -c \
+    "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('op_account','team.1password.com'))" \
+    "$CONFIG_PATH" 2>/dev/null || echo "team.1password.com")
+fi
+
+ACCOUNT=$(/bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
+  -e "display dialog \"Enter your 1Password account URL:\" default answer \"$CURRENT_ACCOUNT\" with title \"Password Filler Setup\"" \
+  -e 'text returned of result' 2>/dev/null || echo "")
+if [ -z "$ACCOUNT" ]; then
+  /bin/launchctl asuser "$CONSOLE_UID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/osascript \
+    -e 'display alert "Setup cancelled" message "Password Filler was not fully configured. Re-run the installer to complete setup." as warning' 2>/dev/null || true
+  exit 0
+fi
+# Use python3 for safe JSON encoding; fall back to sed if python3 fails or is unavailable
+if [ -x "/usr/bin/python3" ] && /usr/bin/python3 -c \
+  "import sys, json; print(json.dumps({'op_account': sys.argv[1], 'op_tag': '.htaccess'}))" \
+  "$ACCOUNT" > "$CONFIG_PATH" 2>/dev/null; then
+  :  # success
+else
+  ACCOUNT_ESC=$(printf '%s' "$ACCOUNT" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
+  printf '{"op_account":"%s","op_tag":".htaccess"}\n' "$ACCOUNT_ESC" > "$CONFIG_PATH"
+fi
+/bin/chmod 600 "$CONFIG_PATH"
   /usr/sbin/chown "$CONSOLE_USER" "$CONFIG_PATH"
 fi
 

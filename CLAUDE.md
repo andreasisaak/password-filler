@@ -53,18 +53,20 @@ EOF
 
 ## Binary Gotchas
 
-- **pkg v5 + macOS**: Locally built binaries get SIGKILL'd by Gatekeeper. Fix: `codesign --sign - --force <binary>` + `xattr -dr com.apple.quarantine <binary>`
+- **pkg v5 + macOS 15+**: Binaries get SIGKILL'd without JIT entitlements. CI re-signs via `installer/entitlements.plist` (`allow-jit` + `allow-unsigned-executable-memory`). postinstall also re-signs after copy.
 - **pkg cache**: `~/.pkg-cache` can cause stale builds. Clear if binary doesn't reflect code changes
-- **CI builds are fine**: GitHub Actions builds fresh, `.pkg` installer skips quarantine
 - **`strings` won't find your code**: pkg compresses JS into V8 snapshot — can't verify with `strings`
 
 ## Release
 
+Always check the latest tag first to determine the next version:
 ```bash
-git pull --rebase origin main
-git push origin main
-git tag v<X.Y.Z>
-git push origin v<X.Y.Z>
+git tag --list 'v*' --sort=-version:refname | head -3
+```
+
+Then release in one line:
+```bash
+git pull --rebase origin main && git push origin main && git tag v<X.Y.Z> && git push origin v<X.Y.Z>
 ```
 
 CI (`release.yml`) triggers on `v*` tags: builds binary → packs `.pkg` + `.deb` → signs Firefox XPI → creates GitHub Release → updates `updates/chrome.xml` + `updates/firefox.json`.

@@ -223,6 +223,10 @@ async function handleMessage(message) {
         await handleLookup(message);
         break;
 
+      case "config":
+        sendMessage({ op_account: OP_ACCOUNT || "" });
+        break;
+
       case "ping":
         sendMessage({ pong: true, cached: getCachedItems()?.length ?? 0 });
         break;
