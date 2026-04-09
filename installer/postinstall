@@ -35,6 +35,12 @@ BRAVE_EXT="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/Ex
 /bin/chmod +x "$BINARY_DEST"
 /usr/sbin/chown -R "$CONSOLE_USER" "$SUPPORT_DIR"
 
+# Re-sign with JIT entitlements required for pkg-compiled Node.js on macOS 15+
+# Without this, V8's JIT allocations are killed by the kernel on newer macOS.
+/usr/bin/codesign --force --sign - \
+  --entitlements "/Library/Application Support/passwordfiller/entitlements.plist" \
+  "$BINARY_DEST" 2>/dev/null || true
+
 # --- 2. op CLI is bundled in the pkg payload at $SUPPORT_DIR/op (no download needed) ---
 
 # --- 3. Ask for 1Password account ---
