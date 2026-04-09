@@ -3,6 +3,10 @@
     "passwordfiller@app": {
       "updates": [
         {
+          "version": "0.3.7",
+          "update_link": "https://github.com/andreasisaak/password-filler/releases/download/v0.3.7/password-filler-firefox-v0.3.7.xpi"
+        },
+        {
           "version": "0.3.6",
           "update_link": "https://github.com/andreasisaak/password-filler/releases/download/v0.3.6/password-filler-firefox-v0.3.6.xpi"
         },
@@ -37,10 +41,6 @@
         {
           "version": "0.2.16",
           "update_link": "https://github.com/andreasisaak/password-filler/releases/download/v0.2.16/password-filler-firefox-v0.2.16.xpi"
-        },
-        {
-          "version": "0.2.15",
-          "update_link": "https://github.com/andreasisaak/password-filler/releases/download/v0.2.15/password-filler-firefox-v0.2.15.xpi"
         }
       ]
     }
