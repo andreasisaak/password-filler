@@ -8,7 +8,7 @@ function render(data) {
     statusEl.className = "status error";
     statusEl.textContent = "Extension not responding";
     metaEl.textContent = "";
-    hostsEl.innerHTML = "";
+    hostsEl.textContent = "";
     return;
   }
 
@@ -23,7 +23,7 @@ function render(data) {
     statusEl.className = "status error";
     statusEl.textContent = "No credentials cached";
     metaEl.textContent = "Click Refresh to load from 1Password";
-    hostsEl.innerHTML = "";
+    hostsEl.textContent = "";
     return;
   }
 
@@ -36,23 +36,32 @@ function render(data) {
   } else {
     statusEl.textContent = data.count + " hostnames cached — refresh for details";
   }
-  metaEl.innerHTML = "Last refresh: " + new Date(data.timestamp).toLocaleString("de-DE") +
-    (data.opAccount ? "<br>" + data.opAccount : "");
+  metaEl.textContent = "Last refresh: " + new Date(data.timestamp).toLocaleString("de-DE");
+  if (data.opAccount) {
+    metaEl.appendChild(document.createElement("br"));
+    metaEl.appendChild(document.createTextNode(data.opAccount));
+  }
 
   if (items.length === 0) {
-    hostsEl.innerHTML = "";
+    hostsEl.textContent = "";
     return;
   }
 
   items.sort(function (a, b) { return a.title.localeCompare(b.title); });
 
-  var html = "";
+  hostsEl.textContent = "";
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
+    var div = document.createElement("div");
+    div.className = "item";
+    var strong = document.createElement("strong");
+    strong.textContent = item.title;
     var wildcards = item.domains.map(function (d) { return "*." + d; }).join(", ");
-    html += "<div class='item'><strong>" + item.title + "</strong><br>" + wildcards + "</div>";
+    div.appendChild(strong);
+    div.appendChild(document.createElement("br"));
+    div.appendChild(document.createTextNode(wildcards));
+    hostsEl.appendChild(div);
   }
-  hostsEl.innerHTML = html;
 }
 
 chrome.runtime.sendMessage({ type: "status" }, function (r) { render(r); });
