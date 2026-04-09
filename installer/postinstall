@@ -69,8 +69,7 @@ else
   printf '{"op_account":"%s","op_tag":".htaccess"}\n' "$ACCOUNT_ESC" > "$CONFIG_PATH"
 fi
 /bin/chmod 600 "$CONFIG_PATH"
-  /usr/sbin/chown "$CONSOLE_USER" "$CONFIG_PATH"
-fi
+/usr/sbin/chown "$CONSOLE_USER" "$CONFIG_PATH"
 
 # --- 4. Register native messaging host ---
 /bin/mkdir -p "$CHROME_NMH" "$BRAVE_NMH" "$FIREFOX_NMH"
