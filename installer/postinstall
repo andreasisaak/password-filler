@@ -30,16 +30,12 @@ CHROME_EXT="$USER_HOME/Library/Application Support/Google/Chrome/External Extens
 BRAVE_EXT="$USER_HOME/Library/Application Support/BraveSoftware/Brave-Browser/External Extensions"
 
 # --- 1. Copy binary to user support dir ---
+# Binary is pre-signed + notarized by CI with Developer ID + JIT entitlements,
+# so no re-signing needed here.
 /bin/mkdir -p "$SUPPORT_DIR"
 /bin/cp "$BINARY_SRC" "$BINARY_DEST"
 /bin/chmod +x "$BINARY_DEST"
 /usr/sbin/chown -R "$CONSOLE_USER" "$SUPPORT_DIR"
-
-# Re-sign with JIT entitlements required for pkg-compiled Node.js on macOS 15+
-# Without this, V8's JIT allocations are killed by the kernel on newer macOS.
-/usr/bin/codesign --force --sign - \
-  --entitlements "/Library/Application Support/passwordfiller/entitlements.plist" \
-  "$BINARY_DEST" 2>/dev/null || true
 
 # --- 2. op CLI is bundled in the pkg payload at $SUPPORT_DIR/op (no download needed) ---
 

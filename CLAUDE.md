@@ -53,9 +53,10 @@ EOF
 
 ## Binary Gotchas
 
-- **pkg v5 + macOS 15+**: Binaries get SIGKILL'd without JIT entitlements. CI re-signs via `installer/entitlements.plist` (`allow-jit` + `allow-unsigned-executable-memory`). postinstall also re-signs after copy.
+- **Signing + Notarization**: CI signs the binary with `Developer ID Application` (hardened runtime + `installer/entitlements.plist`) and signs the `.pkg` with `Developer ID Installer`, then notarizes and staples. Entitlements mirror upstream Node.js (5 keys incl. `allow-jit`, `disable-library-validation`).
 - **pkg cache**: `~/.pkg-cache` can cause stale builds. Clear if binary doesn't reflect code changes
 - **`strings` won't find your code**: pkg compresses JS into V8 snapshot — can't verify with `strings`
+- **Bundled `op` binary**: Pre-signed + notarized by AgileBits; passes Apple notarization as-is (different Team ID is OK)
 
 ## Release
 

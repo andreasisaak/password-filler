@@ -33,6 +33,26 @@ jobs:
             fs.writeFileSync('extension/manifest.json', JSON.stringify(m, null, 2) + '\n');
           "
 
+      - name: Setup Apple signing keychain
+        env:
+          APPLE_CERT_APP_P12_BASE64: ${{ secrets.APPLE_CERT_APP_P12_BASE64 }}
+          APPLE_CERT_INSTALLER_P12_BASE64: ${{ secrets.APPLE_CERT_INSTALLER_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$APPLE_CERT_APP_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/app.p12"
+          echo "$APPLE_CERT_INSTALLER_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+          security import "$RUNNER_TEMP/app.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/installer.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm "$RUNNER_TEMP/app.p12" "$RUNNER_TEMP/installer.p12"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
       - name: Install host dependencies
         run: npm install
         working-directory: host
@@ -41,11 +61,15 @@ jobs:
         run: npx pkg htpasswd-host.js --targets node18-macos-arm64 --output ../dist/passwordfiller-host
         working-directory: host
 
-      - name: Add JIT entitlements to binary (macOS 15+)
+      - name: Sign host binary with Developer ID Application
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          codesign --force --sign - \
+          codesign --force --timestamp --options runtime \
+            --sign "Developer ID Application: Andreas Isaak ($APPLE_TEAM_ID)" \
             --entitlements installer/entitlements.plist \
             dist/passwordfiller-host
+          codesign --verify --verbose=2 dist/passwordfiller-host
 
       - name: Pack Chrome CRX
         env:
@@ -104,15 +128,14 @@ jobs:
           git commit -m "chore: update manifests for v${{ steps.version.outputs.version }}"
           git push origin main
 
-      - name: Build .pkg installer (macOS)
+      - name: Build signed .pkg installer (macOS)
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
           mkdir -p pkg-root/Library/Application\ Support/passwordfiller
           cp dist/passwordfiller-host "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
           chmod +x "pkg-root/Library/Application Support/passwordfiller/passwordfiller-host"
-
-          # Bundle entitlements.plist so postinstall can re-sign (belt-and-suspenders)
-          cp installer/entitlements.plist "pkg-root/Library/Application Support/passwordfiller/entitlements.plist"
 
           # Bundle op CLI so it's available offline, no download at install time
           brew install 1password-cli
@@ -125,7 +148,26 @@ jobs:
             --identifier app.passwordfiller \
             --version "$VERSION" \
             --scripts installer \
+            --sign "Developer ID Installer: Andreas Isaak ($APPLE_TEAM_ID)" \
             dist/password-filler.pkg
+
+      - name: Notarize .pkg
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit dist/password-filler.pkg \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple dist/password-filler.pkg
+          xcrun stapler validate dist/password-filler.pkg
+
+      - name: Cleanup keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

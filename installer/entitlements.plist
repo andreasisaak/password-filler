@@ -2,11 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Required for pkg-compiled Node.js binaries on macOS 15+ -->
-  <!-- V8 JIT requires MAP_JIT memory; without these entitlements macOS kills the process -->
+  <!-- Required for pkg-compiled Node.js binaries. -->
+  <!-- Same set as upstream Node.js uses for notarization. -->
+  <!-- See: https://github.com/nodejs/node/pull/31459 -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-executable-page-protection</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
 </dict>
 </plist>
