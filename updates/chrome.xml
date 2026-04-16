@@ -2,7 +2,7 @@
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
   <app appid='hgelgpkdbkoipapbeblddhgfjlebckah'>
     <updatecheck status='ok'
-      url='https://github.com/andreasisaak/password-filler/releases/download/v0.3.8/password-filler-chrome-v0.3.8.crx'
-      version='0.3.8' />
+      url='https://github.com/andreasisaak/password-filler/releases/download/v0.3.9/password-filler-chrome-v0.3.9.crx'
+      version='0.3.9' />
   </app>
 </gupdate>
