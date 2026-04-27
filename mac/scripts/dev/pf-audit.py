@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """Audit script — findet '.htaccess'-getaggte 1P-Items, die der Agent nicht nutzen kann.
 
-Prototyp für das geplante Defekt-Report-Feature. Spiegelt die Extraction-Logik aus
-mac/Shared/ItemStore.swift::extractCredentials wider.
+Prototyp für das geplante Defekt-Report-Feature. Spiegelt die Extraction- und
+Merge-Logik aus mac/Shared/ItemStore.swift wider:
+
+- extractCredentials: Section-Pfad (STRING/CONCEALED) → Top-Level-Fallback (id-basiert)
+- mergedForDisplay: Items mit identischem (title, hostnames-set, user, pass)
+  werden zu EINEM logischen Eintrag gefaltet (entspricht "x Vaults"-Badge).
+
+Daher werden Items, die nur "Kollision mit ihrem eigenen Merge-Twin" haben,
+nicht als Defekt geflaggt — der Agent handhabt das transparent.
 
 Usage:
     ./pf-audit.py
@@ -58,38 +65,50 @@ def section_label(field: dict) -> str:
     return section.get("label", "") or ""
 
 
-def diagnose_credentials(item: dict) -> list[str]:
-    """Mirrors ItemStore.extractCredentials in Swift.
+def analyze_credentials(item: dict) -> dict:
+    """Mirrors ItemStore.extractCredentials AND diagnoses section integrity.
 
     Section path: first STRING field is username, first CONCEALED is password.
     Field labels in the section are IRRELEVANT — only field type matters.
-    Falls back to top-level if section is missing or incomplete.
+    Falls back to top-level (id-based) if section is missing or incomplete.
+
+    Returns dict with:
+        user, pwd        -- resolved values (either path)
+        section_present  -- a section matching SECTION_REGEX exists (any field in it)
+        section_user_ok  -- section has STRING field with non-empty value
+        section_pass_ok  -- section has CONCEALED field with non-empty value
     """
     fields = item.get("fields", []) or []
 
-    # Section path
     section_fields = [f for f in fields if SECTION_REGEX.search(section_label(f))]
     section_user = next((f for f in section_fields if f.get("type") == "STRING"), None)
     section_pass = next((f for f in section_fields if f.get("type") == "CONCEALED"), None)
-    s_user_ok = section_user is not None and bool(section_user.get("value"))
-    s_pass_ok = section_pass is not None and bool(section_pass.get("value"))
-    if s_user_ok and s_pass_ok:
-        return []
+    s_user = (section_user.get("value") if section_user else None) or None
+    s_pass = (section_pass.get("value") if section_pass else None) or None
 
-    # Top-level fallback (matches by FIELD ID, not label)
-    top_user = next((f for f in fields if f.get("id") == "username" and not f.get("section")), None)
-    top_pass = next((f for f in fields if f.get("id") == "password" and not f.get("section")), None)
-    t_user_ok = top_user is not None and bool(top_user.get("value"))
-    t_pass_ok = top_pass is not None and bool(top_pass.get("value"))
-    if t_user_ok and t_pass_ok:
-        return []
+    top_user_field = next(
+        (f for f in fields if f.get("id") == "username" and not f.get("section")), None
+    )
+    top_pass_field = next(
+        (f for f in fields if f.get("id") == "password" and not f.get("section")), None
+    )
+    t_user = (top_user_field.get("value") if top_user_field else None) or None
+    t_pass = (top_pass_field.get("value") if top_pass_field else None) or None
 
-    defects: list[str] = []
-    if not (s_user_ok or t_user_ok):
-        defects.append("Kein Username")
-    if not (s_pass_ok or t_pass_ok):
-        defects.append("Kein Password")
-    return defects
+    if s_user and s_pass:
+        user, pwd = s_user, s_pass
+    elif t_user and t_pass:
+        user, pwd = t_user, t_pass
+    else:
+        user, pwd = (s_user or t_user), (s_pass or t_pass)
+
+    return {
+        "user": user,
+        "pwd": pwd,
+        "section_present": bool(section_fields),
+        "section_user_ok": bool(s_user),
+        "section_pass_ok": bool(s_pass),
+    }
 
 
 def get_hostnames(item: dict) -> list[str]:
@@ -111,33 +130,111 @@ def audit(account: str, tag: str) -> int:
     print(f"   {len(summaries)} Items mit Tag gefunden — lade Details (5 parallel) …\n")
 
     with ThreadPoolExecutor(max_workers=5) as pool:
-        items = list(pool.map(lambda s: get_item(s["id"], account), summaries))
+        raw_items = list(pool.map(lambda s: get_item(s["id"], account), summaries))
 
-    findings: dict[tuple[str, str], list[str]] = defaultdict(list)
-    hostname_to_items: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    # Reduce to minimal in-memory shape (creds held for merge identity, never printed)
+    items_data: list[dict] = []
+    for raw in raw_items:
+        analysis = analyze_credentials(raw)
+        items_data.append({
+            "title": raw.get("title", "(unbenannt)"),
+            "vault": (raw.get("vault") or {}).get("name", "?"),
+            "hostnames": get_hostnames(raw),
+            "user": analysis["user"],
+            "pwd": analysis["pwd"],
+            "section_present": analysis["section_present"],
+            "section_user_ok": analysis["section_user_ok"],
+            "section_pass_ok": analysis["section_pass_ok"],
+        })
 
-    for item in items:
-        title = item.get("title", "(unbenannt)")
-        vault = (item.get("vault") or {}).get("name", "?")
-        key = (title, vault)
+    # Merge twins: identical (title, hostnames-set, user, pass) collapse to ONE logical item.
+    # Mirrors ItemStore.mergedForDisplay — these never collide in the Agent's lookup.
+    merge_key = lambda d: (d["title"], tuple(sorted(d["hostnames"])), d["user"] or "", d["pwd"] or "")
+    merge_groups: dict[tuple, list[dict]] = defaultdict(list)
+    for item in items_data:
+        merge_groups[merge_key(item)].append(item)
 
-        hosts = get_hostnames(item)
-        if not hosts:
-            findings[key].append("Kein Website-Feld")
+    # Map hostname -> set of distinct merge-group keys
+    hostname_to_groups: dict[str, set[tuple]] = defaultdict(set)
+    for key, members in merge_groups.items():
+        for h in members[0]["hostnames"]:
+            hostname_to_groups[h].add(key)
+
+    findings: dict[tuple[str, str], list[str]] = {}
+    for key, members in merge_groups.items():
+        canonical = members[0]
+        title = canonical["title"]
+        vaults = sorted({m["vault"] for m in members})
+        vault_label = vaults[0] if len(vaults) == 1 else f"{vaults[0]} (+{len(vaults) - 1} weitere)"
+
+        defects: list[str] = []
+
+        if not canonical["hostnames"]:
+            defects.append("Kein Website-Feld")
+
+        # Section-broken-but-fallback-works: User signalisiert "Creds gehören in Section",
+        # aber Section-Felder sind unvollständig. Agent fällt heimlich auf Top-Level zurück
+        # — das sind aber typischerweise andere Credentials (z.B. CMS-Login statt Basic-Auth).
+        if canonical["section_present"] and not (canonical["section_user_ok"] and canonical["section_pass_ok"]):
+            if not canonical["section_user_ok"]:
+                defects.append(
+                    "Section vorhanden, Username-Feld fehlt oder leer "
+                    "— Agent fällt auf Top-Level zurück (vermutlich falsche Credentials)"
+                )
+            if not canonical["section_pass_ok"]:
+                defects.append(
+                    "Section vorhanden, Password-Feld nicht vom Typ Password "
+                    "(z.B. als Text-Feld) — Agent fällt auf Top-Level zurück "
+                    "(vermutlich falsche Credentials)"
+                )
         else:
-            for h in hosts:
-                hostname_to_items[h].add(key)
+            # Keine Section vorhanden ODER Section komplett — dann sollte mind. eine Quelle Creds liefern
+            if not canonical["user"]:
+                defects.append("Kein Username")
+            if not canonical["pwd"]:
+                defects.append("Kein Password")
 
-        for d in diagnose_credentials(item):
-            findings[key].append(d)
+        # Collisions: bundle per OTHER merge group instead of per hostname.
+        # Same-title + identical hostname-set = vault-duplikat with divergent creds
+        # (often a forgotten password rotation in one vault). Otherwise: real cross-conflict.
+        canonical_hostnames_set = set(canonical["hostnames"])
+        collisions_by_other: dict[tuple, list[str]] = defaultdict(list)
+        for h in canonical["hostnames"]:
+            for other_key in hostname_to_groups[h] - {key}:
+                collisions_by_other[other_key].append(h)
 
-    # Ambiguity: exact-hostname collisions (mirrors the Agent's first match stage)
-    for host, owners in hostname_to_items.items():
-        if len(owners) <= 1:
-            continue
-        for owner in owners:
-            others = sorted(f"'{t}' ({v})" for (t, v) in owners if (t, v) != owner)
-            findings[owner].append(f"Hostname '{host}' kollidiert mit {', '.join(others)}")
+        for other_key, shared in collisions_by_other.items():
+            other_members = merge_groups[other_key]
+            other_canonical = other_members[0]
+            other_title = other_canonical["title"]
+            other_vaults = " / ".join(sorted({m["vault"] for m in other_members}))
+            other_hostnames_set = set(other_canonical["hostnames"])
+
+            is_vault_duplicate = (
+                other_title == canonical["title"]
+                and other_hostnames_set == canonical_hostnames_set
+            )
+
+            if is_vault_duplicate:
+                defects.append(
+                    f"Vermutliches Vault-Duplikat mit '{other_title}' ({other_vaults}) "
+                    f"— gleiche {len(shared)} Hostnames, aber abweichende Credentials"
+                )
+            elif len(shared) == 1:
+                defects.append(
+                    f"Hostname-Konflikt mit '{other_title}' ({other_vaults}) "
+                    f"auf '{shared[0]}'"
+                )
+            else:
+                shared_preview = ", ".join(sorted(shared)[:3])
+                more = f" (+{len(shared) - 3} weitere)" if len(shared) > 3 else ""
+                defects.append(
+                    f"Konflikt mit '{other_title}' ({other_vaults}) "
+                    f"auf {len(shared)} Hostnames: {shared_preview}{more}"
+                )
+
+        if defects:
+            findings[(title, vault_label)] = defects
 
     if not findings:
         print("✅ Keine Defekte gefunden.")
