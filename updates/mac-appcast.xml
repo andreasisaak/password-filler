@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Password Filler for macOS</title>
+    <link>https://github.com/andreasisaak/password-filler</link>
+    <description>Auto-update feed for the Password Filler macOS app.</description>
+    <language>en</language>
+    <item>
+      <title>Version 1.0.3</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.0.3</link>
+      <sparkle:version>1.0.3</sparkle:version>
+      <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Mon, 27 Apr 2026 06:56:19 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.0.3/password-filler-v1.0.3.dmg" sparkle:edSignature="uq9a5T/GtHBmdykgNxkXoMSTaGiHmfWbVj8bw/uVP5Ue4AJN+fgyWG90nxdA9JPJmgnuXv9oCkHv0kujIKwRDw==" length="3275446" type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.0.3</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.0.3</link>
+      <sparkle:version>1.0.3</sparkle:version>
+      <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Mon, 27 Apr 2026 06:36:58 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.0.3/password-filler-v1.0.3.dmg" sparkle:edSignature="cZ6m7AGaXkcYt3aHgzNhw2EocqfIqfRfadOJPCzTKaUct0+4MPpd9U9D2hJqqgqsUAhD5vWrySsQMNmKm0wXDQ==" length="3275380" type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.0.3</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.0.3</link>
+      <sparkle:version>1.0.3</sparkle:version>
+      <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Mon, 27 Apr 2026 06:32:03 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.0.3/password-filler-v1.0.3.dmg" sparkle:edSignature="YaXahkKuID6wmmum/x3TYkX0Ue7oMpCrVpih0Ezsbo0wFkMXDFle4MybyjsD4+SUoQEgP3zMNpoNifbINv9RCw==" length="3275436" type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.0.2</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.0.2</link>
+      <sparkle:version>1.0.2</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Sat, 25 Apr 2026 18:52:58 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.0.2/password-filler-v1.0.2.dmg" sparkle:edSignature="zLEEE8k/uQuLKFWtzkQvWFrqrp48bU/Dv2XPZaFsK8kKMTErUrJFxkoJiL71W9O5qrdnQsotKI9gpRLHDgogBg==" length="3275323" type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.0.1</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.0.1</link>
+      <sparkle:version>1.0.1</sparkle:version>
+      <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Fri, 24 Apr 2026 21:34:05 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.0.1/password-filler-v1.0.1.dmg" sparkle:edSignature="AML6htqxg7ZPvE9pY5mHABKFogJUU+SEVL4DpwtdqtjJEGjj/2iPp4rL4DpPB8OKPE7Ylu1iJZ4/4c/7Nij7Ag==" length="3275454" type="application/octet-stream" />
+    </item>
+    <item>
+      <title>Version 1.0.0-rc1</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.0.0-rc1</link>
+      <sparkle:version>1.0.0-rc1</sparkle:version>
+      <sparkle:shortVersionString>1.0.0-rc1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Fri, 24 Apr 2026 20:04:34 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.0.0-rc1/password-filler-v1.0.0-rc1.dmg" sparkle:edSignature="H4YBIRlWbFJMv0wKcR2LZcSPpAy4UJSIEaxk8mLSH4VLKttTWF9IUHl70pBOTayX7kPZ9nGZ4SiTuym8Y5zOAA==" length="3275487" type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,12 @@
+{
+  "categories": ["privacy-security"],
+  "summary": {
+    "en-US": "Auto-fills HTTP Basic Auth dialogs from 1Password. Requires the Password Filler Mac app — macOS only."
+  },
+  "description": {
+    "en-US": "**THIS EXTENSION REQUIRES THE PASSWORD FILLER MACOS DESKTOP APPLICATION.** It is a thin proxy that has no functionality on its own. macOS only.\n\nGet the Mac app: https://github.com/andreasisaak/password-filler/releases/latest\n\n## How it works\n\nWhen a website returns `401 + WWW-Authenticate: Basic`, the extension asks the locally-installed Password Filler Mac app for matching credentials and fills the dialog before the browser shows it. If the Mac app isn't running, the native browser dialog appears as usual.\n\n## Requirements\n\n- macOS 14 (Sonoma) or newer\n- 1Password 8 desktop app, signed in\n- 1Password Settings → Developer → \"Integrate with 1Password CLI\" enabled\n- Password Filler Mac app installed (free, open source)\n\n## Permissions\n\n- **webRequest + webRequestAuthProvider** — detect 401 challenges and supply credentials so the dialog fills silently.\n- **nativeMessaging** — talk to the local Mac app over Firefox's Native Messaging channel; never to any remote server.\n- **alarms** — keep the background script alive between auth challenges so the Native Messaging port stays connected.\n- **host permissions on all URLs** — HTTP Basic Auth can occur on any URL; the extension reads only the hostname of 401 responses, never page content, cookies, headers, or form data.\n\n## Privacy\n\nAll credential lookups happen entirely on your device. No data is sent to any external server. Passwords are never written to disk by the extension; they live in your local 1Password vault and are encrypted at rest by the Mac app.\n\n## Open source\n\nSource code, issue tracker, and Mac app downloads:\nhttps://github.com/andreasisaak/password-filler"
+  },
+  "version": {
+    "license": "GPL-3.0-only"
+  }
+}

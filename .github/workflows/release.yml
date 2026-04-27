@@ -1,0 +1,367 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  SPARKLE_VERSION: '2.9.1'
+  MAC_MIN_SYSTEM_VERSION: '14.0'
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Detect pre-release tag
+        id: rc
+        run: |
+          # RC/beta/alpha tags get flagged as GitHub prereleases. The manifest
+          # commit-back step below targets main — the v1.x mainline since the
+          # 2026-04-27 branch swap (old v0.3.x main archived as old-legacy,
+          # feat/v1-mac-app kept as a parallel mirror for Sparkle bootstrap
+          # of pre-v1.0.4 installs).
+          if [[ "$GITHUB_REF_NAME" =~ -(rc|beta|alpha|preview) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Tag $GITHUB_REF_NAME detected as pre-release."
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Tag $GITHUB_REF_NAME detected as final release."
+          fi
+
+      - name: Pre-flight — required release secrets present
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          PP_MAIN: ${{ secrets.PROVISIONING_PROFILE_MAIN_BASE64 }}
+          PP_AGENT: ${{ secrets.PROVISIONING_PROFILE_AGENT_BASE64 }}
+          PP_CRED: ${{ secrets.PROVISIONING_PROFILE_CREDPROVIDER_BASE64 }}
+          PP_SAFARI: ${{ secrets.PROVISIONING_PROFILE_SAFARIEXT_BASE64 }}
+        run: |
+          MISSING=""
+          [ -z "$SPARKLE_PRIVATE_KEY" ] && MISSING="$MISSING SPARKLE_PRIVATE_KEY"
+          [ -z "$PP_MAIN" ] && MISSING="$MISSING PROVISIONING_PROFILE_MAIN_BASE64"
+          [ -z "$PP_AGENT" ] && MISSING="$MISSING PROVISIONING_PROFILE_AGENT_BASE64"
+          [ -z "$PP_CRED" ] && MISSING="$MISSING PROVISIONING_PROFILE_CREDPROVIDER_BASE64"
+          [ -z "$PP_SAFARI" ] && MISSING="$MISSING PROVISIONING_PROFILE_SAFARIEXT_BASE64"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing required secrets:$MISSING"
+            echo ""
+            echo "Sparkle: see mac/README.md § Sparkle key generation."
+            echo "Provisioning profiles: download Developer ID profiles for the 4"
+            echo "App IDs (app.passwordfiller, .agent, .CredProvider, .SafariExt) from"
+            echo "https://developer.apple.com/account/resources/profiles/list,"
+            echo "base64-encode each .provisionprofile, paste as repo secrets."
+            exit 1
+          fi
+
+      - name: Pre-flight — SUPublicEDKey in Info.plist
+        run: |
+          if ! /usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" mac/PasswordFiller/Info.plist >/dev/null 2>&1; then
+            echo "::error::SUPublicEDKey missing from mac/PasswordFiller/Info.plist."
+            echo "Sparkle refuses to install unsigned updates without the public key embedded."
+            echo "See mac/README.md § Sparkle key generation for the one-time setup."
+            exit 1
+          fi
+
+      - name: Update extension manifest version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8'));
+            m.version = process.env.VERSION;
+            fs.writeFileSync('extension/manifest.json', JSON.stringify(m, null, 2) + '\n');
+          "
+
+      - name: Setup Apple signing keychain
+        env:
+          APPLE_CERT_APP_P12_BASE64: ${{ secrets.APPLE_CERT_APP_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$APPLE_CERT_APP_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/app.p12"
+          security import "$RUNNER_TEMP/app.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm "$RUNNER_TEMP/app.p12"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
+      - name: Verify Developer ID Application identity
+        run: |
+          if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q "Developer ID Application"; then
+            echo "::error::Developer ID Application identity not found in signing keychain."
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+            exit 1
+          fi
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Install Provisioning Profiles
+        env:
+          PP_MAIN: ${{ secrets.PROVISIONING_PROFILE_MAIN_BASE64 }}
+          PP_AGENT: ${{ secrets.PROVISIONING_PROFILE_AGENT_BASE64 }}
+          PP_CRED: ${{ secrets.PROVISIONING_PROFILE_CREDPROVIDER_BASE64 }}
+          PP_SAFARI: ${{ secrets.PROVISIONING_PROFILE_SAFARIEXT_BASE64 }}
+        run: |
+          # Xcode picks profiles from this directory by matching the bundle
+          # ID embedded in each .provisionprofile against the target's
+          # PRODUCT_BUNDLE_IDENTIFIER. Filenames are arbitrary.
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          echo "$PP_MAIN" | base64 --decode > "$PROFILES_DIR/passwordfiller-main.provisionprofile"
+          echo "$PP_AGENT" | base64 --decode > "$PROFILES_DIR/passwordfiller-agent.provisionprofile"
+          echo "$PP_CRED" | base64 --decode > "$PROFILES_DIR/passwordfiller-cred.provisionprofile"
+          echo "$PP_SAFARI" | base64 --decode > "$PROFILES_DIR/passwordfiller-safari.provisionprofile"
+          echo "Installed profiles:"
+          ls -la "$PROFILES_DIR"
+
+      - name: Build Chrome Web Store ZIP
+        # The self-hosted .crx auto-update track was retired in v1.0.3+
+        # (CRX-ID hgelgpkdbkoipapbeblddhgfjlebckah, never had real users
+        # outside the maintainer's own machine). Only the CWS upload ZIP
+        # is built now — the maintainer drops it into the CWS Dashboard
+        # by hand for each release.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/build-cws-crx.js "$VERSION"
+
+      - name: Install xcodegen + create-dmg
+        run: brew install xcodegen create-dmg
+
+      - name: Generate Xcode project
+        run: cd mac && xcodegen generate
+
+      - name: Archive Mac app (Developer ID)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          xcodebuild \
+            -project mac/PasswordFiller.xcodeproj \
+            -scheme PasswordFiller \
+            -configuration Release \
+            -archivePath dist/PasswordFiller.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM=A5278RL7RX \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$VERSION" \
+            archive
+
+      - name: Export signed .app
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath dist/PasswordFiller.xcarchive \
+            -exportPath dist/export \
+            -exportOptionsPlist installer/ExportOptions.plist
+
+      - name: Notarize + staple .app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Notarize the .app itself (not just the DMG) so the notarization
+          # ticket is stapled on disk to the .app bundle. Without this,
+          # SMAppService.register() fails with errSecCSStaticCodeChanged
+          # (-67048) when it tries to verify the launch agent's bundle
+          # offline: it finds a notarized+signed binary but no stapled
+          # ticket, because the ticket lives on the DMG only. Stapling the
+          # DMG is not enough — once the user drags the .app out, the DMG
+          # ticket stops applying. Apple's official guide on distributing
+          # outside the Mac App Store recommends stapling both the .app and
+          # the containing archive.
+          APP_PATH="dist/export/PasswordFiller.app"
+          ZIP_PATH="$RUNNER_TEMP/PasswordFiller-notary.zip"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+          xcrun notarytool submit "$ZIP_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          rm -f "$ZIP_PATH"
+
+      - name: Create .dmg
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          DMG_PATH="dist/password-filler-v${VERSION}.dmg"
+          # create-dmg generates the familiar "drag-app-to-Applications"
+          # layout: 600x400 window, app icon on the left, /Applications
+          # symlink on the right with an arrow between them. Only the
+          # .app goes in — Xcode's export metadata (DistributionSummary
+          # .plist, ExportOptions.plist, Packaging.log) stays behind.
+          create-dmg \
+            --volname "Password Filler" \
+            --background installer/dmg-background.png \
+            --window-pos 200 120 \
+            --window-size 660 420 \
+            --icon-size 140 \
+            --icon "PasswordFiller.app" 180 210 \
+            --app-drop-link 480 210 \
+            --hide-extension "PasswordFiller.app" \
+            --no-internet-enable \
+            "$DMG_PATH" \
+            dist/export/PasswordFiller.app
+          echo "DMG_PATH=$DMG_PATH" >> $GITHUB_ENV
+
+      - name: Sign .dmg
+        run: |
+          codesign --force --timestamp --sign "Developer ID Application" "$DMG_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
+
+      - name: Notarize .dmg
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
+
+      - name: Download Sparkle sign_update tool
+        run: |
+          curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+            -o "$RUNNER_TEMP/sparkle.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+          # Sparkle 2.x tarball extracts bin/sign_update at the root.
+          if [ ! -x "$RUNNER_TEMP/sparkle/bin/sign_update" ]; then
+            echo "::error::sign_update not found in Sparkle ${SPARKLE_VERSION} tarball"
+            find "$RUNNER_TEMP/sparkle" -name sign_update -type f
+            exit 1
+          fi
+          echo "SPARKLE_BIN=$RUNNER_TEMP/sparkle/bin" >> $GITHUB_ENV
+
+      - name: Generate Sparkle ed25519 signature
+        id: sparkle_sign
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          # Stream the key via stdin (--ed-key-file -) so it never lands
+          # on disk. sign_update prints one line like:
+          #   sparkle:edSignature="..." length="12345678"
+          SIGN_OUTPUT="$(printf '%s' "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN/sign_update" --ed-key-file - "$DMG_PATH")"
+          echo "$SIGN_OUTPUT"
+          SIGNATURE="$(echo "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+          LENGTH="$(echo "$SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
+          if [ -z "$SIGNATURE" ] || [ -z "$LENGTH" ]; then
+            echo "::error::Failed to parse sign_update output"
+            exit 1
+          fi
+          echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
+          echo "length=$LENGTH" >> $GITHUB_OUTPUT
+
+      # The self-distributed update manifests (updates/chrome.xml,
+      # updates/firefox.json) and the corresponding manifest.json fields
+      # (`key`, `update_url`, `gecko.update_url`) are retired in v1.0.3+.
+      # Chrome auto-updates via CWS, Firefox auto-updates via AMO listed.
+      # Both XML/JSON files stay in the repo as historical record but are
+      # not touched by CI anymore.
+
+      - name: Update Sparkle appcast
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGNATURE: ${{ steps.sparkle_sign.outputs.signature }}
+          LENGTH: ${{ steps.sparkle_sign.outputs.length }}
+        run: |
+          node scripts/update-appcast.js \
+            --version "$VERSION" \
+            --url "https://github.com/andreasisaak/password-filler/releases/download/v${VERSION}/password-filler-v${VERSION}.dmg" \
+            --length "$LENGTH" \
+            --signature "$SIGNATURE" \
+            --minimum-system-version "$MAC_MIN_SYSTEM_VERSION"
+
+      - name: Cleanup keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+      - name: Create GitHub Release
+        # Browser-extension assets are no longer in releases. Chrome
+        # auto-updates via CWS (manual ZIP upload by maintainer using the
+        # cws-v*.zip artifact left under dist/), Firefox auto-updates via
+        # AMO listed (CI submits directly).
+        uses: softprops/action-gh-release@v3
+        with:
+          prerelease: ${{ steps.rc.outputs.is_prerelease == 'true' }}
+          files: |
+            dist/password-filler-v${{ steps.version.outputs.version }}.dmg
+            dist/password-filler-cws-v${{ steps.version.outputs.version }}.zip
+
+      - name: Commit updated manifests
+        # Commits appcast back to main — the v1.x mainline since the
+        # 2026-04-27 branch swap. The maintainer manually updates from
+        # v1.0.3 (which still polls feat/v1-mac-app) to v1.0.4 by drag-
+        # dropping the DMG, then the feat/v1-mac-app branch can be
+        # deleted. There are no other v1.0.3 installs in the wild.
+        # chrome.xml + firefox.json are no longer touched (retired update
+        # manifests, see comment above).
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git add updates/mac-appcast.xml extension/manifest.json
+          git commit -m "chore: update manifests for v${{ steps.version.outputs.version }}"
+          git push origin main
+
+      - name: Submit Firefox extension to AMO (listed)
+        # Last step on purpose: AMO submissions can fail for AMO-side reasons
+        # (license validation, review-queue glitches, expired API keys) that
+        # have nothing to do with the Mac build. Running this after the DMG
+        # is signed, notarized, released and committed-back means a Firefox
+        # hiccup never blocks the Mac release. continue-on-error makes the
+        # whole workflow stay green even when AMO returns a 4xx — the failure
+        # is still visible in the run log so it doesn't get silently lost.
+        #
+        # Firefox AMO's version schema is strictly numeric (^\d+(\.\d+){0,3}$).
+        # Tags like v1.0.0-rc1 get rejected with VERSION_FORMAT_INVALID, so RC
+        # builds skip Firefox submission entirely — only stable tags (v1.0.0,
+        # v1.0.1, …) reach AMO.
+        #
+        # web-ext v8 with --channel=listed submits to the public AMO listing
+        # via the v5 submission API. It does NOT download a signed XPI back
+        # (issue mozilla/web-ext#3371) — Firefox users install from AMO
+        # directly. The self-distributed XPI track is retired in v1.0.3+.
+        if: steps.rc.outputs.is_prerelease == 'false'
+        continue-on-error: true
+        env:
+          AMO_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm install -g web-ext
+          web-ext sign \
+            --source-dir extension \
+            --channel listed \
+            --amo-metadata extension/amo-metadata.json \
+            --api-key "$AMO_API_KEY" \
+            --api-secret "$AMO_API_SECRET" \
+            --artifacts-dir dist

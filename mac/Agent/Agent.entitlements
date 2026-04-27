@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Helper-app bundle wrapping the LaunchAgent: not sandboxed. -->
+  <key>com.apple.security.app-sandbox</key>
+  <false/>
+  <!-- Required because the Mach-Service published by this Agent uses the
+       `group.A5278RL7RX.app.passwordfiller` prefix (so sandboxed clients
+       like CredProvider.appex can mach-lookup it via their own
+       application-groups entitlement — see Shared/AgentServiceProtocol
+       .swift). macOS requires the *vending* side to carry the matching
+       app-group entitlement, otherwise SMAppService.agent returns
+       `.notFound` on register and launchd never publishes the service.
+       Tool targets cannot carry this entitlement (Apple does not issue a
+       provisioning profile for command-line tool products); hence the
+       Agent ships as a helper-app bundle with its own App ID
+       `app.passwordfiller.agent` and Developer ID provisioning profile.
+       History: prior versions used a Team-ID-prefixed Mach-Service name
+       (`A5278RL7RX.app.passwordfiller.agent`) so the Agent could stay a
+       tool target without app-group entitlement (design.md D3, spike-
+       verified 2026-04-21). Partial-2 (2026-04-22) switched to the
+       `group.`-prefix to fix sandboxd-deny on CredProvider, which
+       silently broke SMAppService registration — fix landed v1.0.1. -->
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>group.A5278RL7RX.app.passwordfiller</string>
+  </array>
+  <!-- Required for Data-Protection Keychain access (SecItemAdd/CopyMatching
+       with kSecUseDataProtectionKeychain=true). The Agent stores an
+       AES-256-GCM symmetric key here that seals the on-disk item cache
+       (see Shared/PersistentCache.swift). Without this entitlement
+       SecItemAdd returns errSecMissingEntitlement (-34018). The access
+       group is the Team-ID-prefixed bundle identifier, matching the
+       `A5278RL7RX.*` wildcard authorized by the Developer ID provisioning
+       profile. -->
+  <key>keychain-access-groups</key>
+  <array>
+    <string>A5278RL7RX.app.passwordfiller</string>
+  </array>
+</dict>
+</plist>

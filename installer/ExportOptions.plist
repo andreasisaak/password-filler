@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- xcodebuild -exportArchive consumes this to copy the signed .app out
+       of the .xcarchive. method=developer-id emits a Developer-ID-signed
+       bundle ready for notarization and .dmg packaging. -->
+  <key>method</key>
+  <string>developer-id</string>
+  <key>teamID</key>
+  <string>A5278RL7RX</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>signingCertificate</key>
+  <string>Developer ID Application</string>
+  <!-- Per-target Developer ID provisioning profiles. Keys are the bundle
+       IDs; values are the profile Names as shown in the Apple Dev Portal
+       (not the UUIDs — profile names are stable across regenerations).
+       The three profiles are installed in CI via the matching base64
+       secrets before xcodebuild -exportArchive runs. -->
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>app.passwordfiller</key>
+    <string>PasswordFiller Developer ID</string>
+    <key>app.passwordfiller.agent</key>
+    <string>PasswordFiller Agent Developer ID</string>
+    <key>app.passwordfiller.CredProvider</key>
+    <string>CredProvider Developer ID</string>
+    <key>app.passwordfiller.SafariExt</key>
+    <string>SafariExt Developer ID</string>
+  </dict>
+  <!-- destination=export writes the .app into the export directory.
+       Alternative "upload" would submit directly to Apple — we notarize
+       in a later step via notarytool so keep destination=export. -->
+  <key>destination</key>
+  <string>export</string>
+</dict>
+</plist>

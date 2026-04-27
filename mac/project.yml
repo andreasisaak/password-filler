@@ -1,0 +1,202 @@
+name: PasswordFiller
+options:
+  bundleIdPrefix: app.passwordfiller
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: A5278RL7RX
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.10"
+    ENABLE_HARDENED_RUNTIME: YES
+  configs:
+    # Dev-builds via pf-install.sh use Automatic signing so Xcode pulls
+    # provisioning profiles for the capability-gated entitlements
+    # (AutoFill Credential Provider requires a Profile or macOS rejects
+    # the launch with EAUTH).
+    Debug:
+      CODE_SIGN_STYLE: Automatic
+    # Release (notarized .dmg via GitHub Actions) uses Manual signing +
+    # Developer ID Application. Per-target PROVISIONING_PROFILE_SPECIFIER
+    # entries below pin each capability-gated target to its downloaded
+    # Developer ID profile. Profiles are installed into
+    # ~/Library/MobileDevice/Provisioning Profiles/ by CI before archive.
+    Release:
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+
+targets:
+  PasswordFiller:
+    type: application
+    platform: macOS
+    sources:
+      - path: PasswordFiller
+      - path: Shared
+        type: group
+    dependencies:
+      - target: PasswordFillerAgent
+        embed: false
+      - target: CredProvider
+        embed: true
+      - target: SafariExt
+        embed: true
+      - target: pf-nmh-bridge
+      - package: Sparkle
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.passwordfiller
+        CODE_SIGN_ENTITLEMENTS: PasswordFiller/PasswordFiller.entitlements
+        INFOPLIST_FILE: PasswordFiller/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: "PasswordFiller Developer ID"
+    postBuildScripts:
+      - name: "Embed Agent helper-app + pf-nmh-bridge"
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/PasswordFillerAgent.app
+          - $(BUILT_PRODUCTS_DIR)/pf-nmh-bridge
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Resources/PasswordFillerAgent.app
+          - $(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/MacOS/pf-nmh-bridge
+        script: |
+          set -e
+          APP="${TARGET_BUILD_DIR}/${PRODUCT_NAME}.app"
+          mkdir -p "${APP}/Contents/MacOS"
+          mkdir -p "${APP}/Contents/Resources"
+          # Helper-app bundle lives in Contents/Resources/. Historically this
+          # was the path Apple recommended for SMAppService helpers. With the
+          # move to classic `launchctl bootstrap` registration the runtime
+          # plist is generated in `~/Library/LaunchAgents/` by
+          # `PasswordFillerApp.registerLaunchAgent()`; we no longer ship a
+          # plist under `Contents/Library/LaunchAgents/`.
+          #
+          # Xcode already signed each target with its own entitlements +
+          # provisioning profile. Re-signing here would strip authorization
+          # → launchd SIGKILL with EAUTH 163. See design.md spike learning #1.
+          # `ditto` preserves the .app bundle structure, symlinks, xattrs,
+          # and code signature better than `cp -R`.
+          ditto "${BUILT_PRODUCTS_DIR}/PasswordFillerAgent.app" \
+                "${APP}/Contents/Resources/PasswordFillerAgent.app"
+          cp -f "${BUILT_PRODUCTS_DIR}/pf-nmh-bridge" "${APP}/Contents/MacOS/pf-nmh-bridge"
+
+  PasswordFillerAgent:
+    # Helper-app bundle, not a CLI tool. Required so the binary can carry
+    # `application-groups = group.A5278RL7RX.app.passwordfiller`, which
+    # macOS demands of any process vending a `group.`-prefixed Mach-Service.
+    # CLI `tool` targets cannot carry app-group entitlements (Apple does
+    # not issue provisioning profiles for them — launchd SIGKILL EAUTH 163).
+    # See Agent/Agent.entitlements for the full history.
+    type: application
+    platform: macOS
+    sources:
+      - path: Agent
+        excludes:
+          - "LaunchAgents/**"
+          - "*.entitlements"
+          - "Info.plist"
+      - path: Shared
+        type: group
+    settings:
+      base:
+        PRODUCT_NAME: PasswordFillerAgent
+        PRODUCT_BUNDLE_IDENTIFIER: app.passwordfiller.agent
+        INFOPLIST_FILE: Agent/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Agent/Agent.entitlements
+        SKIP_INSTALL: YES
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: "PasswordFiller Agent Developer ID"
+
+  CredProvider:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: CredProvider
+      - path: Shared
+        type: group
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.passwordfiller.CredProvider
+        CODE_SIGN_ENTITLEMENTS: CredProvider/CredProvider.entitlements
+        INFOPLIST_FILE: CredProvider/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        # Tells actool to emit AppIcon.icns into Contents/Resources/. Xcode
+        # sets this automatically for app targets based on CFBundleIconName,
+        # but for app-extensions the build system does not — hence explicit.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: "CredProvider Developer ID"
+
+  SafariExt:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: SafariExt
+        excludes:
+          - "SafariExt.entitlements"
+          - "Info.plist"
+      - path: Shared
+        type: group
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.passwordfiller.SafariExt
+        CODE_SIGN_ENTITLEMENTS: SafariExt/SafariExt.entitlements
+        INFOPLIST_FILE: SafariExt/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: "SafariExt Developer ID"
+
+  pf-nmh-bridge:
+    type: tool
+    platform: macOS
+    sources:
+      - path: NMHBridge/main.swift
+    settings:
+      base:
+        PRODUCT_NAME: pf-nmh-bridge
+        SKIP_INSTALL: YES
+
+  PasswordFillerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: Shared
+        type: group
+      # Pull Agent sources (AgentService, UnixSocketServer, IdentityStoreUpdater)
+      # into the test bundle so integration tests can instantiate them directly
+      # without a Mach-Service. `main.swift` is excluded — it's the LaunchAgent
+      # CLI entry point and would clash with XCTest's own main.
+      - path: Agent
+        type: group
+        excludes:
+          - main.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.passwordfiller.Tests
+        # No TEST_HOST — runs as a standalone xctest bundle since the Agent is a
+        # command-line tool and not an .app we can host-test against.
+
+schemes:
+  PasswordFillerTests:
+    build:
+      targets:
+        PasswordFillerTests: all
+    test:
+      targets:
+        - PasswordFillerTests

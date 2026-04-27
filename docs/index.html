@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Password Filler — Auto-fill HTTP Basic Auth from 1Password on macOS</title>
+  <meta name="description" content="Native macOS app that auto-fills HTTP Basic Auth dialogs from 1Password across Chrome, Brave, and Safari. One Touch-ID, then silent fills even after reboot. Encrypted cache, open source." />
+
+  <meta property="og:title" content="Password Filler — 1Password for HTTP Basic Auth on macOS" />
+  <meta property="og:description" content="Auto-fill HTTP Basic Auth dialogs from 1Password across every browser on macOS. One Touch-ID, all browsers." />
+  <meta property="og:image" content="https://andreasisaak.github.io/password-filler/icon-1024.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="icon" type="image/png" href="icon.png" />
+  <link rel="apple-touch-icon" href="icon-1024.png" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Inter', 'system-ui', 'sans-serif'],
+            display: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .glow {
+      background: radial-gradient(60% 60% at 50% 0%, rgba(99,102,241,0.10) 0%, rgba(99,102,241,0) 70%);
+    }
+    .card-grad {
+      background: linear-gradient(180deg, rgba(0,0,0,0.015) 0%, rgba(0,0,0,0) 100%);
+    }
+  </style>
+</head>
+<body class="bg-white text-neutral-900 font-sans antialiased">
+
+  <!-- Nav -->
+  <nav class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+    <a href="#" class="flex items-center gap-2.5">
+      <img src="icon.png" alt="" class="w-8 h-8 rounded-lg" />
+      <span class="font-semibold tracking-tight">Password Filler</span>
+    </a>
+    <div class="flex items-center gap-6 text-sm">
+      <a href="#how" class="text-neutral-600 hover:text-neutral-900 transition">How it works</a>
+      <a href="#browsers" class="text-neutral-600 hover:text-neutral-900 transition">Browsers</a>
+      <a href="#privacy" class="text-neutral-600 hover:text-neutral-900 transition">Privacy</a>
+      <a href="https://github.com/andreasisaak/password-filler" class="text-neutral-600 hover:text-neutral-900 transition flex items-center gap-1.5">
+        <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.07.78 2.16v3.2c0 .31.21.67.8.56C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header class="relative overflow-hidden">
+    <div class="glow absolute inset-0 pointer-events-none"></div>
+    <div class="max-w-6xl mx-auto px-6 pt-16 pb-24 text-center relative">
+      <img src="icon-1024.png" alt="Password Filler app icon" class="w-28 h-28 mx-auto mb-8 rounded-3xl drop-shadow-2xl" />
+      <h1 class="font-display text-5xl sm:text-6xl font-bold tracking-tight">
+        HTTP Basic Auth, <span class="text-indigo-600">solved.</span>
+      </h1>
+      <p class="mt-6 text-lg sm:text-xl text-neutral-600 max-w-2xl mx-auto">
+        Native macOS app that auto-fills <code class="text-neutral-900 bg-neutral-100 px-1.5 py-0.5 rounded text-base">.htaccess</code> credentials from 1Password across Chrome, Brave, and Safari. One Touch-ID, then silent fills — even after reboot.
+      </p>
+
+      <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <a id="download-btn" href="https://github.com/andreasisaak/password-filler/releases/latest"
+           class="group inline-flex items-center gap-3 bg-neutral-900 text-white hover:bg-neutral-800 transition px-7 py-4 rounded-xl font-semibold shadow-lg shadow-indigo-500/10">
+          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+          <span class="flex flex-col items-start leading-tight">
+            <span class="text-xs text-white/60 font-normal">Download for macOS</span>
+            <span id="download-label">Latest release</span>
+          </span>
+        </a>
+        <a href="https://github.com/andreasisaak/password-filler"
+           class="group inline-flex items-center gap-3 border border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50 transition px-7 py-4 rounded-xl font-semibold text-neutral-900">
+          <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.07.78 2.16v3.2c0 .31.21.67.8.56C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+          <span class="flex flex-col items-start leading-tight">
+            <span class="text-xs text-neutral-600 font-normal">View source on</span>
+            <span>GitHub</span>
+          </span>
+        </a>
+      </div>
+
+      <p class="mt-6 text-sm text-neutral-600">
+        macOS 14 (Sonoma) or newer · Apple Silicon · Free &amp; open source (GPL-3.0)
+      </p>
+      <p class="mt-2 text-sm text-neutral-600">
+        Requires <strong class="text-neutral-900">1Password 8</strong> with the <em>“Connect with 1Password CLI”</em> integration enabled.
+      </p>
+    </div>
+  </header>
+
+  <!-- Problem -->
+  <section class="max-w-3xl mx-auto px-6 py-20 text-center">
+    <h2 class="text-3xl font-bold tracking-tight">Why this exists</h2>
+    <p class="mt-6 text-neutral-600 text-lg leading-relaxed">
+      HTTP Basic Auth dialogs — the popups you get on staging servers, internal tools, and <code class="text-neutral-900 bg-neutral-100 px-1 rounded text-base">.htaccess</code>-protected URLs — aren't normal login forms. They're a browser-native prompt, and <strong class="text-neutral-900">1Password's extension can't fill them</strong>. So you copy-paste credentials by hand. Every visit. In every browser.
+    </p>
+    <p class="mt-6 text-neutral-900 text-lg leading-relaxed font-medium">
+      Password Filler closes that gap. A single native macOS app fetches credentials on demand, encrypts them in a per-Mac Keychain-locked cache, and serves every browser from one source. Approve once with Touch-ID — fills stay silent for days, even after reboot.
+    </p>
+  </section>
+
+  <!-- How it works -->
+  <section id="how" class="max-w-6xl mx-auto px-6 py-20">
+    <h2 class="text-3xl font-bold tracking-tight text-center mb-4">How it works</h2>
+    <p class="text-neutral-600 text-center mb-16 max-w-2xl mx-auto">
+      <strong class="text-neutral-900">Before you start:</strong> open <em>1Password 8 → Settings → Developer</em> and enable <em>“Integrate with 1Password CLI”</em>. Without this, the Mac app can't talk to your vault.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="card-grad border border-neutral-200 rounded-2xl p-8">
+        <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-semibold mb-5">1</div>
+        <h3 class="font-semibold text-lg">Install the macOS app</h3>
+        <p class="mt-3 text-neutral-600 text-sm leading-relaxed">
+          Drag <code class="text-neutral-900 bg-neutral-100 px-1 rounded">Password Filler.app</code> to <code class="text-neutral-900 bg-neutral-100 px-1 rounded">/Applications</code> and launch it. The Agent registers itself, writes Native-Messaging manifests for every installed browser, and a one-time onboarding wizard verifies your 1Password connection.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-8">
+        <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-semibold mb-5">2</div>
+        <h3 class="font-semibold text-lg">Add the browser extension</h3>
+        <p class="mt-3 text-neutral-600 text-sm leading-relaxed">
+          A slim proxy. It catches <code class="text-neutral-900 bg-neutral-100 px-1 rounded">onAuthRequired</code> events and forwards them to the Mac agent over a Unix socket. Holds no credentials, no cache.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-8">
+        <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-semibold mb-5">3</div>
+        <h3 class="font-semibold text-lg">Tag your 1Password items</h3>
+        <p class="mt-3 text-neutral-600 text-sm leading-relaxed">
+          Add the tag <code class="text-neutral-900 bg-neutral-100 px-1 rounded">.htaccess</code> (configurable) to the login items you want auto-filled, and make sure each one has a URL set — items without a URL are skipped. Visit a tagged URL: credentials fill automatically, no dialog.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Browser extensions -->
+  <section id="browsers" class="max-w-6xl mx-auto px-6 py-20">
+    <h2 class="text-3xl font-bold tracking-tight text-center mb-4">Works in every browser</h2>
+    <p class="text-neutral-600 text-center mb-16">Install the extension once per browser. The Mac app does the heavy lifting.</p>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <!-- Chrome + Brave (same Chromium extension) -->
+      <a href="https://chromewebstore.google.com/detail/password-filler/ebcpahcihmnibmplnblcikgjiicmpcff"
+         class="card-grad border border-neutral-200 hover:border-neutral-400 hover:bg-neutral-50 transition rounded-2xl p-6 group">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex -space-x-2">
+            <img src="browsers/chrome.png" alt="" class="w-9 h-9" />
+            <img src="browsers/brave.png" alt="" class="w-9 h-9" />
+          </div>
+          <span class="font-semibold">Chrome &amp; Brave</span>
+        </div>
+        <p class="text-sm text-neutral-600">Install from the Chrome Web Store — works in both browsers. Auto-updates.</p>
+        <span class="mt-4 inline-flex items-center gap-1 text-sm text-indigo-600 group-hover:text-indigo-600">
+          Install <span class="transition group-hover:translate-x-0.5">→</span>
+        </span>
+      </a>
+
+      <!-- Firefox (coming soon) -->
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6 opacity-70">
+        <div class="flex items-center gap-3 mb-4">
+          <img src="browsers/firefox.png" alt="" class="w-9 h-9" />
+          <span class="font-semibold">Firefox</span>
+        </div>
+        <p class="text-sm text-neutral-600">Submission to Mozilla Add-ons is in review.</p>
+        <span class="mt-4 inline-flex items-center gap-1 text-xs text-amber-800 px-2 py-1 bg-amber-100 border border-amber-200 rounded">
+          Coming soon
+        </span>
+      </div>
+
+      <!-- Safari -->
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <img src="browsers/safari.png" alt="" class="w-9 h-9" />
+          <span class="font-semibold">Safari</span>
+        </div>
+        <p class="text-sm text-neutral-600">Built into the Mac app. Two quick enables: <em>System Settings → Passwords → AutoFill</em> (the credential provider), then <em>Safari → Settings → Extensions</em> (the web extension). No separate download.</p>
+        <span class="mt-4 inline-flex items-center gap-1 text-xs text-neutral-600 px-2 py-1 bg-neutral-100 rounded">
+          Included
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Privacy & Security -->
+  <section id="privacy" class="max-w-6xl mx-auto px-6 py-20">
+    <h2 class="text-3xl font-bold tracking-tight text-center mb-4">Privacy &amp; security by default</h2>
+    <p class="text-neutral-600 text-center mb-16 max-w-2xl mx-auto">
+      Password Filler is open source under GPL-3.0. Nothing leaves your Mac.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> Thin bridge, not another credential store
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          Password Filler doesn't store, sync, or duplicate your vault. It fetches credentials on demand from your local 1Password app and forwards them to the browser. Your secrets stay where they belong: in 1Password.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> On-disk cache, vault-grade encryption
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          Auto-fill across reboots needs a local cache — Password Filler encrypts it with AES-256-GCM, locked by a per-Mac key in the macOS Keychain. Cache TTL is configurable (1–30 days, default 7); credentials are never written to disk in plaintext.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> Built for offboarding
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          When 1Password access is revoked — removed from team, signed out, vault unshared — Password Filler wipes its cache within 30 minutes. A background poller (<code class="text-neutral-900 bg-neutral-100 px-1 rounded">op whoami</code>, also on Mac wake) catches the change so cached credentials never outlive the access that fetched them.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> Open, signed, sandboxed
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          GPL-3.0 source on GitHub, auditable line by line. Apple-notarized DMG passes Gatekeeper without overrides. Updates are ed25519-signed via Sparkle 2 and install silently — no admin prompt, no <code class="text-neutral-900 bg-neutral-100 px-1 rounded">.pkg</code> scripts. The Safari extension and credential provider run in Apple's App Sandbox.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="max-w-3xl mx-auto px-6 py-20 text-center">
+    <h2 class="text-3xl font-bold tracking-tight">Ready to stop typing staging passwords?</h2>
+    <a id="download-btn-2" href="https://github.com/andreasisaak/password-filler/releases/latest"
+       class="mt-8 inline-flex items-center gap-3 bg-neutral-900 text-white hover:bg-neutral-800 transition px-7 py-4 rounded-xl font-semibold shadow-lg shadow-indigo-500/10">
+      <svg viewBox="0 0 24 24" class="w-6 h-6 fill-current" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+      <span class="flex flex-col items-start leading-tight">
+        <span class="text-xs text-white/60 font-normal">Download for macOS</span>
+        <span id="download-label-2">Latest release</span>
+      </span>
+    </a>
+    <p class="mt-4 text-sm text-neutral-600">macOS 14 Sonoma or newer · Apple Silicon · 1Password 8 + CLI integration</p>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-neutral-200 mt-12">
+    <div class="max-w-6xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-neutral-600">
+      <div class="flex items-center gap-2.5">
+        <img src="icon.png" alt="" class="w-5 h-5 rounded" />
+        <span>Password Filler — GPL-3.0 — © Andreas Isaak</span>
+      </div>
+      <div class="flex items-center gap-5">
+        <a href="https://github.com/andreasisaak/password-filler" class="hover:text-neutral-900 transition">GitHub</a>
+        <a href="https://github.com/andreasisaak/password-filler/blob/feat/v1-mac-app/LICENSE" class="hover:text-neutral-900 transition">License</a>
+        <a href="https://github.com/andreasisaak/password-filler/releases" class="hover:text-neutral-900 transition">Releases</a>
+        <a href="https://github.com/andreasisaak/password-filler/issues" class="hover:text-neutral-900 transition">Issues</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Resolve the latest .dmg release dynamically from the GitHub API.
+    // Falls back to /releases/latest if the API call fails.
+    (async () => {
+      const REPO = 'andreasisaak/password-filler';
+      const labels = document.querySelectorAll('[id^="download-label"]');
+      const buttons = document.querySelectorAll('[id^="download-btn"]');
+
+      try {
+        const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+          headers: { Accept: 'application/vnd.github+json' },
+        });
+        if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+        const release = await res.json();
+        const dmg = (release.assets || []).find(a => a.name.toLowerCase().endsWith('.dmg'));
+        if (!dmg) throw new Error('No .dmg asset on latest release');
+
+        const sizeMb = (dmg.size / (1024 * 1024)).toFixed(1);
+        const label = `${release.tag_name} · ${sizeMb} MB`;
+
+        labels.forEach(el => (el.textContent = label));
+        buttons.forEach(el => (el.href = dmg.browser_download_url));
+      } catch (err) {
+        console.warn('Falling back to /releases/latest:', err);
+        // Buttons already point at /releases/latest as a static fallback.
+      }
+    })();
+  </script>
+</body>
+</html>

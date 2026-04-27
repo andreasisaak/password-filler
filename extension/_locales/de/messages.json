@@ -1,0 +1,18 @@
+{
+  "extName": {
+    "message": "Password Filler",
+    "description": "Extension name shown in browser UI."
+  },
+  "extDesc": {
+    "message": "Füllt HTTP Basic Auth automatisch aus 1Password aus (benötigt Password Filler Mac-App, nur macOS)",
+    "description": "Extension description in store listing and browser UI."
+  },
+  "tooltipConnected": {
+    "message": "Password Filler — Mac-App verbunden",
+    "description": "Toolbar icon tooltip when the Mac app native host is reachable."
+  },
+  "tooltipDisconnected": {
+    "message": "Password Filler — Mac-App nicht verfügbar",
+    "description": "Toolbar icon tooltip when the Mac app native host is unreachable."
+  }
+}

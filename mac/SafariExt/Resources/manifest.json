@@ -1,0 +1,18 @@
+{
+  "manifest_version": 2,
+  "name": "Password Filler Observer",
+  "version": "1.0.0",
+  "description": "Observes main-frame navigation so Password Filler can fill Basic-Auth dialogs in Safari.",
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "permissions": [
+    "webNavigation",
+    "webRequest",
+    "webRequestBlocking",
+    "tabs",
+    "nativeMessaging",
+    "<all_urls>"
+  ]
+}

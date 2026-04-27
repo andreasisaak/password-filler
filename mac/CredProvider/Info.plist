@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Password Filler</string>
+  <key>CFBundleExecutable</key>
+  <string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
+  <key>CFBundleIdentifier</key>
+  <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>$(PRODUCT_NAME)</string>
+  <key>CFBundlePackageType</key>
+  <string>XPC!</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$(MARKETING_VERSION)</string>
+  <key>CFBundleVersion</key>
+  <string>$(CURRENT_PROJECT_VERSION)</string>
+  <key>NSExtension</key>
+  <dict>
+    <key>NSExtensionPointIdentifier</key>
+    <string>com.apple.authentication-services-credential-provider-ui</string>
+    <!-- macOS 14+ ASCredentialProvider requires BOTH principal-class keys:
+         ASCredentialProviderViewControllerPrincipalClass (modern, inside
+         NSExtensionAttributes) surfaces the provider in System Settings,
+         while NSExtensionPrincipalClass (top-level, "legacy") is what
+         ExtensionFoundation actually uses to instantiate the ViewController
+         when Safari activates the provider. Without the top-level key the
+         appex process spawns, reaches "beginning extension request", then
+         silently exits because it cannot resolve our class — Safari falls
+         back to its own Basic-Auth dialog.
+         Verified against the working safari-auth-spike Info.plist which
+         carries both keys. -->
+    <key>NSExtensionPrincipalClass</key>
+    <string>$(PRODUCT_MODULE_NAME).CredentialProviderViewController</string>
+    <key>NSExtensionAttributes</key>
+    <dict>
+      <key>ASCredentialProviderExtensionCapabilities</key>
+      <dict>
+        <key>ProvidesPasswords</key>
+        <true/>
+        <key>ProvidesPasskeys</key>
+        <false/>
+        <key>ShowsConfigurationUI</key>
+        <false/>
+      </dict>
+      <key>ASCredentialProviderViewControllerPrincipalClass</key>
+      <string>$(PRODUCT_MODULE_NAME).CredentialProviderViewController</string>
+    </dict>
+  </dict>
+</dict>
+</plist>
