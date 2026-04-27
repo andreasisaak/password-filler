@@ -90,6 +90,8 @@ The shipped `pf-install.sh` script does this automatically for `mac/build/Debug/
 
 **Agent registration architecture:** `launchctl bootstrap` is the only supported path. SMAppService was removed because of an AMFI-LWCR self-constraint mismatch on macOS 26.4.x that SIGKILLed the agent on every spawn. See [specs/launchagent-bypass-smappservice.md](specs/launchagent-bypass-smappservice.md). **Do not re-introduce SMAppService.**
 
+**⚠️ Never `launchctl bootout` standalone before re-launching the App.** `registerLaunchAgent()` has a "plist content unchanged → skip bootstrap" optimization (`PasswordFillerApp.swift`). After a bare `bootout`, the next launch sees the same plist on disk, skips re-bootstrap, then `kickstartIfVersionChanged` fails with `rc=113` because the service is not registered — the App ends up unable to reach the Agent (`Connection init failed at lookup with error 3 - No such process`), and Refresh / Lookups silently do nothing. To recover: either run `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/app.passwordfiller.agent.plist` manually, **or** `rm -f ~/Library/LaunchAgents/app.passwordfiller.agent.plist` before re-launching the App so the unchanged-check fails and the bootstrap path runs. When swapping in a new local archive build, prefer the second form — it forces a clean re-registration regardless of plist content.
+
 ## Xcode gotchas
 
 - **Always build the app scheme** (`PasswordFiller`), not individual target schemes — target schemes trigger 2-3 min provisioning-profile lookups.
