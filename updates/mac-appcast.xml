@@ -6,6 +6,15 @@
     <description>Auto-update feed for the Password Filler macOS app.</description>
     <language>en</language>
     <item>
+      <title>Version 1.2.0</title>
+      <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.2.0</link>
+      <sparkle:version>1.2.0</sparkle:version>
+      <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <pubDate>Mon, 27 Apr 2026 14:36:04 GMT</pubDate>
+      <enclosure url="https://github.com/andreasisaak/password-filler/releases/download/v1.2.0/password-filler-v1.2.0.dmg" sparkle:edSignature="1hhYHJ0VeZx38Q3eJLDbXewki4MnzUjfPW6CSSgSF0SVlNNm3EJbyRqtRBCUZvF2HqL1jEVkvKiVcznw8e7MBg==" length="3430048" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.1.0</title>
       <link>https://github.com/andreasisaak/password-filler/releases/tag/v1.1.0</link>
       <sparkle:version>1.1.0</sparkle:version>
