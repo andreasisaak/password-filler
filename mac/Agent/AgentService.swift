@@ -11,6 +11,7 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
     private let configProvider: () -> Config
     private let configReloader: () throws -> Config
     private let identityUpdater: IdentityStoreUpdater?
+    let auditStore: AuditStore
     private let log = Logger(subsystem: "app.passwordfiller.agent", category: "xpc")
 
     /// Serializes state mutation. Refresh work runs off the main queue but hits
@@ -26,14 +27,19 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         opClient: OpClient,
         configProvider: @escaping () -> Config,
         configReloader: @escaping () throws -> Config,
-        identityUpdater: IdentityStoreUpdater? = nil
+        identityUpdater: IdentityStoreUpdater? = nil,
+        auditStore: AuditStore = AuditStore()
     ) {
         self.store = store
         self.opClient = opClient
         self.configProvider = configProvider
         self.configReloader = configReloader
         self.identityUpdater = identityUpdater
+        self.auditStore = auditStore
         super.init()
+        // Best-effort eager load so `getAuditFindings` works before the first
+        // refresh completes. A decode failure is non-fatal — `current` stays empty.
+        _ = try? auditStore.load()
     }
 
     // MARK: - Mutable state (stateQueue-protected)
@@ -124,6 +130,10 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         reply(true)
     }
 
+    public func getAuditFindings(reply: @escaping (Data?) -> Void) {
+        reply(XPCPayload.encode(auditStore.current))
+    }
+
     // MARK: - In-process helpers for UnixSocketServer
 
     /// Synchronous lookup used by the non-XPC Unix-Socket path.
@@ -195,7 +205,14 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
                 return hosts.isEmpty ? nil : (summary, hosts)
             }
 
-            let stored = await fanOutItemGet(for: withHosts)
+            // URL-less items never reach `op item get`; the audit needs them so it
+            // can flag them as `noWebsite` without spending an extra round-trip.
+            let urlLessSummaries: [ItemSummary] = summaries.filter {
+                ItemStore.extractHostnames(from: $0.urls).isEmpty
+            }
+
+            let fetched = await fanOutItemGet(for: withHosts)
+            let stored = fetched.compactMap(\.stored)
 
             store.replace(with: stored)
             setConnectionState(.connected)
@@ -203,6 +220,10 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
 
             let allHosts = Set(stored.flatMap(\.hostnames))
             try? identityUpdater?.update(hosts: allHosts, items: stored)
+
+            // Audit pipeline — isolated, must not roll back the sync. A bug here
+            // means the user has no defect list, but Fill keeps working.
+            runAuditHook(urlLessSummaries: urlLessSummaries, rawItems: fetched.map(\.raw))
 
             let duration = Date().timeIntervalSince(start)
             log.info("Refresh complete: \(stored.count, privacy: .public) items in \(duration, privacy: .public)s")
@@ -234,6 +255,15 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         }
     }
 
+    /// Pairs an `op item get` reply with its (optional) extracted `StoredItem`.
+    /// `stored == nil` when credential extraction failed — the raw item is still
+    /// surfaced so the audit can flag it as `noUsername` / `noPassword` /
+    /// `sectionBroken*` without re-fetching.
+    struct FetchResult: Equatable {
+        let stored: StoredItem?
+        let raw: FullItem
+    }
+
     /// Fans `op item get` subprocesses out with **bounded parallelism** (5 in
     /// flight). 1Password's Desktop-App-Auth layer serialises per-parent-process
     /// auth checks in `op daemon`, so 30+ simultaneous `op item get` subprocesses
@@ -241,37 +271,38 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
     /// healthy and still gives ~6× the serial-port throughput.
     private func fanOutItemGet(
         for withHosts: [(summary: ItemSummary, hostnames: [String])]
-    ) async -> [StoredItem] {
+    ) async -> [FetchResult] {
         let opClient = self.opClient
         let maxInFlight = 5
-        return await withTaskGroup(of: StoredItem?.self) { group in
-            var out: [StoredItem] = []
+        return await withTaskGroup(of: FetchResult?.self) { group in
+            var out: [FetchResult] = []
             out.reserveCapacity(withHosts.count)
             var inFlight = 0
             for (summary, hostnames) in withHosts {
                 if inFlight >= maxInFlight, let maybe = await group.next() {
                     // Reap oldest result, preserve it, then queue the next.
-                    if let item = maybe { out.append(item) }
+                    if let result = maybe { out.append(result) }
                     inFlight -= 1
                 }
                 inFlight += 1
                 group.addTask { [log] in
                     do {
                         let full = try opClient.itemGet(id: summary.id)
-                        guard let creds = ItemStore.extractCredentials(from: full.fields ?? []) else {
-                            return nil
+                        let creds = ItemStore.extractCredentials(from: full.fields ?? [])
+                        let stored: StoredItem? = creds.map { c in
+                            let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
+                            return StoredItem(
+                                itemId: summary.id,
+                                title: summary.title,
+                                hostnames: hostnames,
+                                domains: domains,
+                                username: c.username,
+                                password: c.password,
+                                sourceVault: summary.vault?.name,
+                                cachedAt: Date()
+                            )
                         }
-                        let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-                        return StoredItem(
-                            itemId: summary.id,
-                            title: summary.title,
-                            hostnames: hostnames,
-                            domains: domains,
-                            username: creds.username,
-                            password: creds.password,
-                            sourceVault: summary.vault?.name,
-                            cachedAt: Date()
-                        )
+                        return FetchResult(stored: stored, raw: full)
                     } catch {
                         let describe = String(describing: error)
                         let itemID = summary.id
@@ -282,9 +313,27 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
             }
             // Drain remaining (~maxInFlight) results.
             for await maybe in group {
-                if let item = maybe { out.append(item) }
+                if let result = maybe { out.append(result) }
             }
             return out
+        }
+    }
+
+    /// Runs `AuditChecker.analyze` and persists the result. Wrapped in a do/catch
+    /// so a bug in the audit pipeline can never roll back a successful sync.
+    /// Exposed at module scope (default access) so the defensive test can drive
+    /// it directly without spinning up a real `op` binary.
+    func runAuditHook(urlLessSummaries: [ItemSummary], rawItems: [FullItem]) {
+        do {
+            let findings = try AuditChecker.analyze(
+                urlLessSummaries: urlLessSummaries,
+                rawItems: rawItems
+            )
+            try auditStore.save(findings)
+            log.info("audit: \(findings.count, privacy: .public) findings persisted")
+        } catch {
+            let describe = String(describing: error)
+            log.error("audit failed: \(describe, privacy: .public) — sync unaffected")
         }
     }
 

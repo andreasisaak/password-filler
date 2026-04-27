@@ -62,6 +62,15 @@ struct PasswordFillerApp: App {
         Settings {
             SettingsView(client: xpcClient, updater: updaterController.updater)
         }
+
+        // Diagnostics window. Opened from the popover via
+        // `openWindow(id: "audit")` when the indicator row is clicked. The
+        // scene is registered unconditionally so `openWindow` always succeeds;
+        // the window itself shows a "no issues" placeholder when findings
+        // happen to be empty (e.g. user opened it directly via menu).
+        Window("Diagnostics", id: "audit") {
+            AuditWindowView(client: xpcClient)
+        }
     }
 }
 

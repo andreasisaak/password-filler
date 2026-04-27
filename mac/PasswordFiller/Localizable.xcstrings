@@ -4,6 +4,9 @@
     ".htaccess" : {
       "shouldTranslate" : false
     },
+    "%@ items with issues" : {
+
+    },
     "%@ vaults" : {
 
     },
@@ -82,6 +85,47 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld entries loaded from 1Password."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld items with issues" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Ein Item mit Problemen"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Items mit Problemen"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "1 item with issues"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items with issues"
                 }
               }
             }
@@ -283,6 +327,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Agent nicht erreichbar"
+          }
+        }
+      }
+    },
+    "All `.htaccess`-tagged items look healthy." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Items mit `.htaccess`-Tag sehen gut aus."
           }
         }
       }
@@ -504,6 +559,17 @@
         }
       }
     },
+    "Conflict with '%@' (%@) on %lld hostnames" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konflikt mit '%1$@' (%2$@) auf %3$lld Hostnames"
+          }
+        }
+      }
+    },
     "Connected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -585,6 +651,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Benutzerdefiniert: %@"
+          }
+        }
+      }
+    },
+    "Diagnostics" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnose"
           }
         }
       }
@@ -699,6 +776,17 @@
         }
       }
     },
+    "Hostname conflict with '%@' (%@) on '%@'" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hostname-Konflikt mit '%1$@' (%2$@) auf '%3$@'"
+          }
+        }
+      }
+    },
     "Install browser extensions" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -783,6 +871,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Los geht's"
+          }
+        }
+      }
+    },
+    "Likely vault duplicate of '%@' (%@) — same %lld hostnames, diverging credentials" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vermutliches Vault-Duplikat mit '%1$@' (%2$@) — gleiche %3$lld Hostnames, abweichende Credentials"
           }
         }
       }
@@ -908,6 +1007,17 @@
         }
       }
     },
+    "No issues found" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Probleme gefunden"
+          }
+        }
+      }
+    },
     "No items in cache" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -915,6 +1025,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Items im Cache"
+          }
+        }
+      }
+    },
+    "No password" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Password"
+          }
+        }
+      }
+    },
+    "No username" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Username"
+          }
+        }
+      }
+    },
+    "No website field" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Website-Feld"
           }
         }
       }
@@ -1205,6 +1348,28 @@
         }
       }
     },
+    "Section present but password field is not of type Password (e.g. stored as a Text field) — Agent falls back to top-level (likely wrong credentials)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Section vorhanden, Password-Feld nicht vom Typ Password (z.B. als Text-Feld) — Agent fällt auf Top-Level zurück (vermutlich falsche Credentials)"
+          }
+        }
+      }
+    },
+    "Section present but username field is missing or empty — Agent falls back to top-level (likely wrong credentials)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Section vorhanden, Username-Feld fehlt oder leer — Agent fällt auf Top-Level zurück (vermutlich falsche Credentials)"
+          }
+        }
+      }
+    },
     "Security" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1267,6 +1432,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Logs anzeigen"
+          }
+        }
+      }
+    },
+    "Showing only items in vaults you have access to." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt nur Items aus Vaults, auf die du Zugriff hast."
           }
         }
       }

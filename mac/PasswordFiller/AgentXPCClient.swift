@@ -30,6 +30,10 @@ final class AgentXPCClient {
     /// Empty until the first successful `listItems` call.
     private(set) var items: [DisplayRow] = []
 
+    /// Audit findings for items the Agent can't autofill correctly. Refreshed
+    /// alongside `items` and `status` on every `pollOnce`.
+    private(set) var findings: [Finding] = []
+
     /// `true` while a user-triggered `triggerCacheRefresh` is in flight. The
     /// popover uses this to spin the refresh icon and disable the button.
     private(set) var isRefreshing = false
@@ -117,7 +121,8 @@ final class AgentXPCClient {
     func pollOnce() async {
         async let statusPart: () = fetchStatus()
         async let itemsPart: () = fetchItems()
-        _ = await (statusPart, itemsPart)
+        async let findingsPart: () = fetchFindings()
+        _ = await (statusPart, itemsPart, findingsPart)
     }
 
     /// Ask the Agent to re-read `config.json` from disk and apply the new
@@ -252,6 +257,22 @@ final class AgentXPCClient {
             log.error("listItems XPC error: \(String(describing: error), privacy: .public)")
             // Leave existing `items` intact — a transient XPC failure during
             // poll shouldn't blank the UI.
+        }
+    }
+
+    private func fetchFindings() async {
+        do {
+            let fresh: [Finding]? = try await call { proxy, reply in
+                proxy.getAuditFindings(reply: reply)
+            } decode: { data in
+                XPCPayload.decode([Finding].self, from: data)
+            }
+            findings = (fresh ?? []).sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+        } catch {
+            log.error("getAuditFindings XPC error: \(String(describing: error), privacy: .public)")
+            // Same policy as `fetchItems`: leave the last good list in place.
         }
     }
 

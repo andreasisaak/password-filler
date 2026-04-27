@@ -16,15 +16,21 @@ import os.log
 struct PopoverContentView: View {
     @Bindable var client: AgentXPCClient
     @Environment(\.openURL) private var openURL
+    @Environment(\.openWindow) private var openWindow
 
     private static let log = Logger(subsystem: "app.passwordfiller.main", category: "ui")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StatusRow(status: client.status, error: client.connectionError)
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 8)
+            StatusRow(
+                status: client.status,
+                error: client.connectionError,
+                findingsCount: client.findings.count,
+                onOpenAudit: { openWindow(id: "audit") }
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
 
             RefreshRow(
                 lastRefresh: client.status?.lastRefresh,
@@ -68,13 +74,16 @@ struct PopoverContentView: View {
 private struct StatusRow: View {
     let status: AgentStatus?
     let error: String?
+    let findingsCount: Int
+    let onOpenAudit: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: iconName)
                 .font(.title2)
                 .foregroundStyle(iconColor)
                 .frame(width: 24)
+                .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(primaryLine)
@@ -83,6 +92,21 @@ private struct StatusRow: View {
                     Text(secondary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                if findingsCount > 0 {
+                    Button(action: onOpenAudit) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text("\(findingsCount) items with issues")
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             Spacer()
@@ -237,7 +261,7 @@ private struct ItemRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "lock.fill")
-                .foregroundStyle(.tint)
+                .foregroundStyle(.green)
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {

@@ -53,6 +53,11 @@ public enum PFMachService {
 
     /// Trivial liveness check used by the extension popup.
     func ping(reply: @escaping (Bool) -> Void)
+
+    /// Latest snapshot of `[Finding]` produced by the most recent successful refresh.
+    /// `reply` delivers JSON-encoded `[Finding]` — empty array when no findings.
+    /// Read from in-memory state on the Agent (no disk roundtrip), so latency is <1ms.
+    func getAuditFindings(reply: @escaping (Data?) -> Void)
 }
 
 // MARK: - Wire payloads (JSON over XPC)

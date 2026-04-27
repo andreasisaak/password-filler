@@ -18,8 +18,10 @@ final class AgentXPCIntegrationTests: XCTestCase {
     private var listener: NSXPCListener!
     private var service: AgentService!
     private var store: ItemStore!
+    private var auditStore: AuditStore!
     private var connection: NSXPCConnection!
     private var tempURL: URL!
+    private var auditURL: URL!
 
     override func setUpWithError() throws {
         // Config persisted to a throwaway file so `reloadConfig` has something
@@ -28,11 +30,13 @@ final class AgentXPCIntegrationTests: XCTestCase {
             .appendingPathComponent("pf-xpc-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         tempURL = tmp.appendingPathComponent("config.json")
+        auditURL = tmp.appendingPathComponent("audit-findings.json")
 
         let configStore = ConfigStore(url: tempURL)
         try configStore.save(Config(opAccount: "team.1password.com", opTag: ".htaccess", cacheTtlDays: 7))
 
         store = ItemStore(ttl: 7 * 86_400)
+        auditStore = AuditStore(url: auditURL)
         let bogusOp = URL(fileURLWithPath: "/dev/null/nonexistent-op")
         let opClient = OpClient(bundledOpURL: bogusOp, account: nil, timeout: 5)
 
@@ -41,7 +45,8 @@ final class AgentXPCIntegrationTests: XCTestCase {
             opClient: opClient,
             configProvider: { (try? configStore.load()) ?? Config() },
             configReloader: { try configStore.load() },
-            identityUpdater: nil
+            identityUpdater: nil,
+            auditStore: auditStore
         )
         service.setConnectionState(.connected)
 
@@ -227,6 +232,81 @@ final class AgentXPCIntegrationTests: XCTestCase {
         XCTAssertNotNil(result.errorMessage)
         // ttlDays reflects the *currently active* store TTL, not the failed one.
         XCTAssertEqual(result.ttlDays, Int(store.ttl / 86_400))
+    }
+
+    // MARK: - getAuditFindings
+
+    func testGetAuditFindingsEmptyByDefault() throws {
+        let proxy = try self.proxy()
+        let data: Data? = try awaitReply { reply in proxy.getAuditFindings(reply: reply) }
+        let findings = try XCTUnwrap(XPCPayload.decode([Finding].self, from: data))
+        XCTAssertEqual(findings, [])
+    }
+
+    func testGetAuditFindingsReturnsPersistedFindings() throws {
+        // Pre-populate via the AuditStore the service is already wired to.
+        let f = Finding(
+            id: Finding.makeId(title: "X", vaults: ["Shared"]),
+            title: "X",
+            vaults: ["Shared"],
+            defects: [.noUsername],
+            detectedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        try auditStore.save([f])
+
+        let proxy = try self.proxy()
+        let data: Data? = try awaitReply { reply in proxy.getAuditFindings(reply: reply) }
+        let findings = try XCTUnwrap(XPCPayload.decode([Finding].self, from: data))
+
+        XCTAssertEqual(findings, [f])
+    }
+
+    // MARK: - Audit-hook defensive behaviour
+
+    func testAuditHookFailureLeavesItemStoreAndLookupsIntact() throws {
+        // AuditStore pointed at a path under a *file* (not a directory) — `save`
+        // can't create the parent dir, so the write throws. The hook MUST swallow
+        // that error and leave the rest of the agent's state alone.
+        let parentFile = tempURL.deletingLastPathComponent()
+            .appendingPathComponent("blocking-file")
+        try Data("not a dir".utf8).write(to: parentFile)
+        let badURL = parentFile.appendingPathComponent("audit-findings.json")
+        let badAuditStore = AuditStore(url: badURL)
+
+        let configStore = ConfigStore(url: tempURL)
+        let isolatedService = AgentService(
+            store: store,
+            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"),
+                               account: nil, timeout: 5),
+            configProvider: { (try? configStore.load()) ?? Config() },
+            configReloader: { try configStore.load() },
+            identityUpdater: nil,
+            auditStore: badAuditStore
+        )
+
+        // Pre-load the ItemStore so we can prove lookups still work after the
+        // hook misfires.
+        let item = makeItem(id: "1", hostnames: ["app.example.com"], username: "u", password: "p")
+        store.replace(with: [item])
+
+        // Sentinel input that would normally produce a `noWebsite` finding —
+        // proves the hook *tried* to do work, not that it short-circuited.
+        let summary = ItemSummary(
+            id: "url-less",
+            title: "URL-less",
+            urls: nil,
+            vault: VaultRef(id: nil, name: "Shared")
+        )
+
+        // The whole point: this call must not throw or crash.
+        isolatedService.runAuditHook(urlLessSummaries: [summary], rawItems: [])
+
+        // ItemStore untouched.
+        XCTAssertEqual(store.count, 1)
+        XCTAssertEqual(store.lookup(hostname: "app.example.com")?.username, "u")
+        // AuditStore.current did not get populated — the save failed so the
+        // in-memory state stays consistent with the on-disk state (still empty).
+        XCTAssertTrue(badAuditStore.current.isEmpty)
     }
 
     // MARK: - Helpers
