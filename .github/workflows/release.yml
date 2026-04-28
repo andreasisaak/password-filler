@@ -17,6 +17,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Need full history + tags so the "extension changes since previous
+          # release" detection step below can run `git ls-tree` against the
+          # prior tag.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -40,6 +45,37 @@ jobs:
           else
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
             echo "Tag $GITHUB_REF_NAME detected as final release."
+          fi
+
+      - name: Detect extension changes since previous release
+        # The Mac app and the browser extension share a tag namespace so the
+        # version numbers stay aligned, but most releases only ship Mac-side
+        # changes. Submitting a byte-identical extension to AMO + uploading
+        # an identical CWS-zip on every Mac-only release wastes Mozilla
+        # reviewer time and pollutes the CWS dashboard. Detect whether
+        # `extension/` actually changed since the previous tag (modulo the
+        # auto-bumped `manifest.json` version field) and gate the CWS build
+        # + AMO submission on the result.
+        id: ext-changes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "ℹ️ No previous tag — treating as first release, will build + submit"
+            exit 0
+          fi
+          # `git ls-tree -r` lines are "<mode> <type> <sha><TAB><path>".
+          # Split by tab → field 2 is the path. Exact match excludes only the
+          # top-level manifest.json (CI auto-bumps that on every release), not
+          # any nested manifest.json that might exist someday.
+          PREV_HASH=$(git ls-tree -r "$PREV_TAG" -- extension/ | awk -F'\t' '$2 != "extension/manifest.json"' | sha256sum | cut -d' ' -f1)
+          CURR_HASH=$(git ls-tree -r HEAD       -- extension/ | awk -F'\t' '$2 != "extension/manifest.json"' | sha256sum | cut -d' ' -f1)
+          if [ "$PREV_HASH" = "$CURR_HASH" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ extension/ unchanged since $PREV_TAG — skipping CWS-zip build + AMO submission"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ extension/ changed since $PREV_TAG — will build CWS-zip + submit to AMO"
           fi
 
       - name: Pre-flight — required release secrets present
@@ -138,7 +174,10 @@ jobs:
         # (CRX-ID hgelgpkdbkoipapbeblddhgfjlebckah, never had real users
         # outside the maintainer's own machine). Only the CWS upload ZIP
         # is built now — the maintainer drops it into the CWS Dashboard
-        # by hand for each release.
+        # by hand for each release. Skipped when `extension/` is unchanged
+        # since the previous release (Mac-only release path) so a stale
+        # ZIP doesn't get attached to the GitHub Release.
+        if: steps.ext-changes.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: node scripts/build-cws-crx.js "$VERSION"
@@ -311,9 +350,12 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ steps.rc.outputs.is_prerelease == 'true' }}
+          # CWS-zip is matched as a glob so a Mac-only release (no extension
+          # changes → step skipped above) doesn't fail the release with
+          # "file not found".
           files: |
             dist/password-filler-v${{ steps.version.outputs.version }}.dmg
-            dist/password-filler-cws-v${{ steps.version.outputs.version }}.zip
+            dist/password-filler-cws-v*.zip
 
       - name: Commit updated manifests
         # Commits appcast back to main — the v1.x mainline since the
@@ -350,7 +392,7 @@ jobs:
         # via the v5 submission API. It does NOT download a signed XPI back
         # (issue mozilla/web-ext#3371) — Firefox users install from AMO
         # directly. The self-distributed XPI track is retired in v1.0.3+.
-        if: steps.rc.outputs.is_prerelease == 'false'
+        if: steps.rc.outputs.is_prerelease == 'false' && steps.ext-changes.outputs.changed == 'true'
         continue-on-error: true
         env:
           AMO_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
