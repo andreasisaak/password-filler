@@ -14,5 +14,17 @@
   "tooltipDisconnected": {
     "message": "Password Filler — Mac app not available",
     "description": "Toolbar icon tooltip when the Mac app native host is unreachable."
+  },
+  "bannerTitle": {
+    "message": "Login automatically filled",
+    "description": "Title of the on-page banner shown after a Basic-Auth credential fill."
+  },
+  "bannerWhy": {
+    "message": "This page is password-protected. You'll only see this notice on your first visit.",
+    "description": "Explanatory subtitle of the on-page banner."
+  },
+  "bannerCloseLabel": {
+    "message": "Close",
+    "description": "Accessible label for the banner's close button."
   }
 }

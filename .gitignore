@@ -5,6 +5,7 @@ extension/.amo-upload-uuid
 pkg-root/
 .DS_Store
 specs/
+.claude/
 
 # Mac Xcode project (generated from project.yml via xcodegen)
 mac/*.xcodeproj/
