@@ -261,27 +261,37 @@
   </footer>
 
   <script>
-    // Resolve the latest .dmg release dynamically from the GitHub API.
-    // Falls back to /releases/latest if the API call fails.
+    // Resolve the latest Mac DMG from the Sparkle appcast — the canonical
+    // Mac-version source. Extension-only releases (conditional CI in
+    // release.yml) don't touch the appcast, so the topmost <item> is
+    // always a real Mac release with a stapled+notarized DMG. Served via
+    // raw.githubusercontent.com (Fastly-cached, no API rate limit).
+    // Falls back to /releases/latest if the fetch or parse fails.
     (async () => {
-      const REPO = 'andreasisaak/password-filler';
+      const APPCAST = 'https://raw.githubusercontent.com/andreasisaak/password-filler/main/updates/mac-appcast.xml';
       const labels = document.querySelectorAll('[id^="download-label"]');
       const buttons = document.querySelectorAll('[id^="download-btn"]');
 
       try {
-        const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-          headers: { Accept: 'application/vnd.github+json' },
-        });
-        if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-        const release = await res.json();
-        const dmg = (release.assets || []).find(a => a.name.toLowerCase().endsWith('.dmg'));
-        if (!dmg) throw new Error('No .dmg asset on latest release');
+        const res = await fetch(APPCAST, { cache: 'no-cache' });
+        if (!res.ok) throw new Error(`Appcast fetch ${res.status}`);
+        const xml = new DOMParser().parseFromString(await res.text(), 'application/xml');
+        if (xml.querySelector('parsererror')) throw new Error('Appcast XML parse error');
 
-        const sizeMb = (dmg.size / (1024 * 1024)).toFixed(1);
-        const label = `${release.tag_name} · ${sizeMb} MB`;
+        const item = xml.querySelector('channel > item');
+        if (!item) throw new Error('No <item> in appcast');
+        const enclosure = item.querySelector('enclosure');
+        const url = enclosure?.getAttribute('url');
+        const length = Number(enclosure?.getAttribute('length'));
+        const sparkleNs = 'http://www.andymatuschak.org/xml-namespaces/sparkle';
+        const version = item.getElementsByTagNameNS(sparkleNs, 'shortVersionString')[0]?.textContent?.trim();
+        if (!url || !length || !version) throw new Error('Appcast item missing url/length/version');
+
+        const sizeMb = (length / (1024 * 1024)).toFixed(1);
+        const label = `v${version} · ${sizeMb} MB`;
 
         labels.forEach(el => (el.textContent = label));
-        buttons.forEach(el => (el.href = dmg.browser_download_url));
+        buttons.forEach(el => (el.href = url));
       } catch (err) {
         console.warn('Falling back to /releases/latest:', err);
         // Buttons already point at /releases/latest as a static fallback.
