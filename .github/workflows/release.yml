@@ -47,6 +47,32 @@ jobs:
             echo "Tag $GITHUB_REF_NAME detected as final release."
           fi
 
+      - name: Detect Mac changes since previous release
+        # Same approach as extension/ detection below. Most extension-only
+        # releases shouldn't ship a byte-identical "new" DMG that Sparkle
+        # prompts every Mac user to download — skip the Mac archive +
+        # notarize + appcast pipeline when mac/ is unchanged. The Mac
+        # version effectively skips numbers in this case (e.g. 1.2.0 →
+        # 1.4.0), which is fine: Sparkle just compares numerically and
+        # users only ever see the versions where Mac actually shipped.
+        id: mac-changes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "ℹ️ No previous tag — treating as first release, will build Mac"
+            exit 0
+          fi
+          PREV_HASH=$(git ls-tree -r "$PREV_TAG" -- mac/ | sha256sum | cut -d' ' -f1)
+          CURR_HASH=$(git ls-tree -r HEAD       -- mac/ | sha256sum | cut -d' ' -f1)
+          if [ "$PREV_HASH" = "$CURR_HASH" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ mac/ unchanged since $PREV_TAG — skipping archive + notarize + appcast"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ mac/ changed since $PREV_TAG — will archive + notarize + ship"
+          fi
+
       - name: Detect extension changes since previous release
         # The Mac app and the browser extension share a tag namespace so the
         # version numbers stay aligned, but most releases only ship Mac-side
@@ -104,6 +130,7 @@ jobs:
           fi
 
       - name: Pre-flight — SUPublicEDKey in Info.plist
+        if: steps.mac-changes.outputs.changed == 'true'
         run: |
           if ! /usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" mac/PasswordFiller/Info.plist >/dev/null 2>&1; then
             echo "::error::SUPublicEDKey missing from mac/PasswordFiller/Info.plist."
@@ -124,6 +151,7 @@ jobs:
           "
 
       - name: Setup Apple signing keychain
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           APPLE_CERT_APP_P12_BASE64: ${{ secrets.APPLE_CERT_APP_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
@@ -142,6 +170,7 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
       - name: Verify Developer ID Application identity
+        if: steps.mac-changes.outputs.changed == 'true'
         run: |
           if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q "Developer ID Application"; then
             echo "::error::Developer ID Application identity not found in signing keychain."
@@ -151,6 +180,7 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Install Provisioning Profiles
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           PP_MAIN: ${{ secrets.PROVISIONING_PROFILE_MAIN_BASE64 }}
           PP_AGENT: ${{ secrets.PROVISIONING_PROFILE_AGENT_BASE64 }}
@@ -183,12 +213,15 @@ jobs:
         run: node scripts/build-cws-crx.js "$VERSION"
 
       - name: Install xcodegen + create-dmg
+        if: steps.mac-changes.outputs.changed == 'true'
         run: brew install xcodegen create-dmg
 
       - name: Generate Xcode project
+        if: steps.mac-changes.outputs.changed == 'true'
         run: cd mac && xcodegen generate
 
       - name: Archive Mac app (Developer ID)
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -206,6 +239,7 @@ jobs:
             archive
 
       - name: Export signed .app
+        if: steps.mac-changes.outputs.changed == 'true'
         run: |
           xcodebuild \
             -exportArchive \
@@ -214,6 +248,7 @@ jobs:
             -exportOptionsPlist installer/ExportOptions.plist
 
       - name: Notarize + staple .app
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -242,6 +277,7 @@ jobs:
           rm -f "$ZIP_PATH"
 
       - name: Create .dmg
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -266,11 +302,13 @@ jobs:
           echo "DMG_PATH=$DMG_PATH" >> $GITHUB_ENV
 
       - name: Sign .dmg
+        if: steps.mac-changes.outputs.changed == 'true'
         run: |
           codesign --force --timestamp --sign "Developer ID Application" "$DMG_PATH"
           codesign --verify --verbose=2 "$DMG_PATH"
 
       - name: Notarize .dmg
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -286,6 +324,7 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
 
       - name: Download Sparkle sign_update tool
+        if: steps.mac-changes.outputs.changed == 'true'
         run: |
           curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
             -o "$RUNNER_TEMP/sparkle.tar.xz"
@@ -300,6 +339,7 @@ jobs:
           echo "SPARKLE_BIN=$RUNNER_TEMP/sparkle/bin" >> $GITHUB_ENV
 
       - name: Generate Sparkle ed25519 signature
+        if: steps.mac-changes.outputs.changed == 'true'
         id: sparkle_sign
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
@@ -326,6 +366,7 @@ jobs:
       # not touched by CI anymore.
 
       - name: Update Sparkle appcast
+        if: steps.mac-changes.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           SIGNATURE: ${{ steps.sparkle_sign.outputs.signature }}
@@ -350,27 +391,32 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ steps.rc.outputs.is_prerelease == 'true' }}
-          # CWS-zip is matched as a glob so a Mac-only release (no extension
-          # changes → step skipped above) doesn't fail the release with
-          # "file not found".
+          # Both DMG and CWS-zip are matched as globs so either side being
+          # skipped (extension-only or Mac-only release) doesn't fail the
+          # release with "file not found".
           files: |
-            dist/password-filler-v${{ steps.version.outputs.version }}.dmg
+            dist/password-filler-v*.dmg
             dist/password-filler-cws-v*.zip
 
       - name: Commit updated manifests
-        # Commits appcast back to main — the v1.x mainline since the
-        # 2026-04-27 branch swap. The maintainer manually updates from
-        # v1.0.3 (which still polls feat/v1-mac-app) to v1.0.4 by drag-
-        # dropping the DMG, then the feat/v1-mac-app branch can be
-        # deleted. There are no other v1.0.3 installs in the wild.
-        # chrome.xml + firefox.json are no longer touched (retired update
-        # manifests, see comment above).
+        # Commits manifest version-bump (always) and appcast (only when
+        # Mac actually rebuilt) back to main — the v1.x mainline since the
+        # 2026-04-27 branch swap. chrome.xml + firefox.json are no longer
+        # touched (retired update manifests, see comment above).
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout main
-          git add updates/mac-appcast.xml extension/manifest.json
+          PATHS=(extension/manifest.json)
+          if [ "${{ steps.mac-changes.outputs.changed }}" = "true" ]; then
+            PATHS+=(updates/mac-appcast.xml)
+          fi
+          git add "${PATHS[@]}"
+          if git diff --staged --quiet; then
+            echo "ℹ️ No manifest changes to commit"
+            exit 0
+          fi
           git commit -m "chore: update manifests for v${{ steps.version.outputs.version }}"
           git push origin main
 
