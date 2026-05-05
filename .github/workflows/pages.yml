@@ -1,0 +1,46 @@
+name: Pages
+
+# Deploys docs/ as the GitHub Pages site at https://andreasisaak.github.io/password-filler/.
+#
+# Replaces the legacy "Deploy from branch" mode that triggered a Pages build on
+# every main push (including Mac-only commits that never touch docs/). Each
+# legacy build also produced a paired github-pages[bot] deploy run, doubling
+# the noise in the Actions tab. This workflow only runs when docs/ actually
+# changes — and as a single workflow run, not two.
+#
+# Switching modes requires a one-time settings change too:
+#   gh api -X PUT repos/<owner>/<repo>/pages -f build_type=workflow
+# (or via Settings → Pages → "GitHub Actions" in the web UI).
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Concurrent runs serialize on the same group, but the latest one wins on
+# conflict — `cancel-in-progress: false` is the GitHub-Pages recommended
+# setting since deploys must complete to register the new artifact.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
