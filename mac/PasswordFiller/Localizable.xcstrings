@@ -1549,6 +1549,9 @@
         }
       }
     },
+    "Touch ID or your password is required for the system installer." : {
+
+    },
     "Try again" : {
       "extractionState" : "manual",
       "localizations" : {

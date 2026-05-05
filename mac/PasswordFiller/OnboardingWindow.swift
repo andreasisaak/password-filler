@@ -258,6 +258,18 @@ private struct PreflightRowModel {
     var onePassword: PreflightStatus = .checking
     var opBinary: PreflightStatus = .checking
     var opPath: String?
+    var install: InstallProgress = .idle
+}
+
+/// State of the in-wizard 1Password CLI download/install flow. Shown only when
+/// `model.opBinary == .warn` — i.e. no `op` was found on PATH or in any of the
+/// usual locations. `OpInstaller` triggers Apple's standard `installer(8)` via
+/// admin auth panel; the user sees Touch ID / password prompt, then the binary
+/// lands in `/usr/local/bin/op`, and the row flips to .ok on the next probe.
+private enum InstallProgress: Equatable {
+    case idle
+    case running(fraction: Double, status: String)
+    case failed(String)
 }
 
 private struct PreflightStep: View {
@@ -279,11 +291,13 @@ private struct PreflightStep: View {
                 PreflightRow(
                     title: String(localized: "1Password CLI (op) available"),
                     detail: model.opPath.map { String(localized: "Found at \($0)") }
-                        ?? String(localized: "Install op via brew install 1password-cli or from 1password.com."),
+                        ?? String(localized: "Click \u{201E}Install 1Password CLI\u{201C} below — we download the official package from 1password.com and run Apple's installer (Touch ID required)."),
                     status: model.opBinary
                 )
             }
             .padding(.leading, 4)
+
+            installSection
 
             Spacer(minLength: 0)
 
@@ -294,12 +308,75 @@ private struct PreflightStep: View {
                     Label("Check again", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
+                .disabled(isInstalling)
                 Spacer()
             }
         }
         .task {
             await runChecks()
         }
+    }
+
+    /// Shows nothing when op is found (the .ok row already says everything),
+    /// the install button + last-error block when op is missing, or a live
+    /// progress bar while the installer is running.
+    @ViewBuilder
+    private var installSection: some View {
+        if case .ok = model.opBinary {
+            EmptyView()
+        } else {
+            switch model.install {
+            case .idle:
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        Task { await runInstall() }
+                    } label: {
+                        Label("Install 1Password CLI", systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Text("Touch ID or your password is required for the system installer.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 4)
+
+            case .running(let fraction, let status):
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: fraction) {
+                        Text(status).font(.callout)
+                    }
+                    .progressViewStyle(.linear)
+                }
+                .padding(.leading, 4)
+
+            case .failed(let message):
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 12) {
+                        Button {
+                            Task { await runInstall() }
+                        } label: {
+                            Label("Try again", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                        Link(
+                            "Manual download (1password.com)",
+                            destination: URL(string: "https://1password.com/downloads/command-line/")!
+                        )
+                        .font(.callout)
+                    }
+                }
+                .padding(.leading, 4)
+            }
+        }
+    }
+
+    private var isInstalling: Bool {
+        if case .running = model.install { return true }
+        return false
     }
 
     private func runChecks() async {
@@ -316,8 +393,30 @@ private struct PreflightStep: View {
         if let path = PreflightProbe.resolveOpBinary() {
             model.opPath = path
             model.opBinary = .ok
+            // A previous failed attempt becomes irrelevant once op is on disk.
+            model.install = .idle
         } else {
-            model.opBinary = .warn(String(localized: "op could not be found in any of the known paths. Install it and try again."))
+            model.opBinary = .warn(String(localized: "op could not be found in any of the known paths."))
+        }
+    }
+
+    private func runInstall() async {
+        model.install = .running(fraction: 0, status: String(localized: "Preparing …"))
+        do {
+            try await OpInstaller.install { fraction, status in
+                model.install = .running(fraction: fraction, status: status)
+            }
+            // installer reported success → re-probe so the row flips to .ok.
+            model.install = .idle
+            await runChecks()
+        } catch OpInstaller.Error.authDeclined {
+            // User canceled the auth panel — go back to idle so the button
+            // reappears without a scary red error message.
+            model.install = .idle
+        } catch let error as OpInstaller.Error {
+            model.install = .failed(error.description)
+        } catch {
+            model.install = .failed(error.localizedDescription)
         }
     }
 }
