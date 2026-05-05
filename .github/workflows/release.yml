@@ -63,14 +63,19 @@ jobs:
             echo "ℹ️ No previous tag — treating as first release, will build Mac"
             exit 0
           fi
-          PREV_HASH=$(git ls-tree -r "$PREV_TAG" -- mac/ | sha256sum | cut -d' ' -f1)
-          CURR_HASH=$(git ls-tree -r HEAD       -- mac/ | sha256sum | cut -d' ' -f1)
+          # Hash includes mac/ AND the release workflow itself — changes
+          # to release.yml directly affect what ends up in the .app bundle
+          # (e.g. v1.3.2 fixed the Bundle-step ordering, but the Mac-build
+          # was wrongly skipped because mac/ tree hadn't changed). Same for
+          # project.yml → xcodegen output.
+          PREV_HASH=$(git ls-tree -r "$PREV_TAG" -- mac/ .github/workflows/release.yml | sha256sum | cut -d' ' -f1)
+          CURR_HASH=$(git ls-tree -r HEAD       -- mac/ .github/workflows/release.yml | sha256sum | cut -d' ' -f1)
           if [ "$PREV_HASH" = "$CURR_HASH" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ mac/ unchanged since $PREV_TAG — skipping archive + notarize + appcast"
+            echo "ℹ️ mac/ + release.yml unchanged since $PREV_TAG — skipping archive + notarize + appcast"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✅ mac/ changed since $PREV_TAG — will archive + notarize + ship"
+            echo "✅ mac/ or release.yml changed since $PREV_TAG — will archive + notarize + ship"
           fi
 
       - name: Detect extension changes since previous release
