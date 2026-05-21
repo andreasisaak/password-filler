@@ -14,6 +14,39 @@ public enum OpClientError: Error, Equatable {
     case decodingFailed(String)
     case processFailed(stderr: String, exitCode: Int32)
     case timeout(command: String)
+    /// The configured `op_account` cannot be reconciled with the accounts `op`
+    /// actually knows, and the choice is genuinely ambiguous. The associated
+    /// string is a user-facing, actionable message.
+    case accountUnavailable(String)
+}
+
+/// One entry from `op account list --format=json`. Field names mirror
+/// `op whoami --format=json` (`user_uuid` / `account_uuid`).
+public struct OpAccount: Decodable, Equatable, Sendable {
+    public let url: String
+    public let email: String
+    public let userId: String
+    public let accountId: String
+
+    enum CodingKeys: String, CodingKey {
+        case url
+        case email
+        case userId = "user_uuid"
+        case accountId = "account_uuid"
+    }
+
+    public init(url: String, email: String, userId: String, accountId: String) {
+        self.url = url
+        self.email = email
+        self.userId = userId
+        self.accountId = accountId
+    }
+
+    /// True when `identifier` exactly equals one of this account's identifying
+    /// strings — the same set `op --account <value>` accepts as a filter.
+    public func matches(_ identifier: String) -> Bool {
+        [url, email, userId, accountId].contains(identifier)
+    }
 }
 
 /// Thin abstraction implemented by `OpClient`. Exists so that tests (and, if
@@ -93,14 +126,68 @@ public final class OpClient: WhoamiProvider {
     // MARK: - High-level commands
 
     public func whoami() throws -> WhoamiResult {
-        let args = buildArgs(["whoami"])
+        let args = buildArgs(["whoami"], account: account)
         let result = try runProcess(args: args)
         return Self.parseWhoami(stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode)
     }
 
-    public func itemList(tag: String) throws -> [ItemSummary] {
+    /// Lists every account `op` knows. Runs without an `--account` filter and
+    /// without preflight, so it works even while accounts are locked or signed
+    /// out — which is exactly the state we recover from when `op_account` is
+    /// stale (`resolveAccountArgument`).
+    public func listAccounts() throws -> [OpAccount] {
+        let args = buildArgs(["account", "list"], account: nil)
+        let result = try runProcess(args: args)
+        guard result.exitCode == 0 else {
+            throw OpClientError.processFailed(stderr: result.stderr, exitCode: result.exitCode)
+        }
+        return try decode([OpAccount].self, from: result.stdout)
+    }
+
+    /// Reconciles the configured `op_account` hint against the accounts `op`
+    /// actually knows and returns the `--account` value to use for this refresh
+    /// (`nil` is never returned — a concrete account is always resolved or an
+    /// error is thrown). Throws `accountUnavailable` only when the choice is
+    /// genuinely ambiguous: picking the wrong account could fill credentials
+    /// from the wrong vault, so we refuse to guess.
+    public func resolveAccountArgument() throws -> String? {
+        try Self.resolveAccount(configured: account, accounts: try listAccounts())
+    }
+
+    /// Pure resolution policy — exposed so it can be unit-tested without
+    /// spawning a real `op` subprocess. See `resolveAccountArgument`.
+    public static func resolveAccount(configured: String?, accounts: [OpAccount]) throws -> String? {
+        guard let onlyAccount = accounts.first else {
+            throw OpClientError.accountUnavailable(
+                "No 1Password account is available. Open 1Password and sign in.")
+        }
+
+        if let configured, !configured.isEmpty {
+            if let match = accounts.first(where: { $0.matches(configured) }) {
+                return match.url
+            }
+            // Configured value matches nothing `op` knows.
+            if accounts.count == 1 {
+                // Only one real account exists — the config is stale; heal to it.
+                return onlyAccount.url
+            }
+            throw OpClientError.accountUnavailable(
+                "1Password account \"\(configured)\" was not found. "
+                + "Available: \(accounts.map(\.url).joined(separator: ", ")). "
+                + "Pick the right one in Settings.")
+        }
+
+        // No hint configured.
+        if accounts.count == 1 { return onlyAccount.url }
+        throw OpClientError.accountUnavailable(
+            "Several 1Password accounts are available "
+            + "(\(accounts.map(\.url).joined(separator: ", "))). "
+            + "Choose one in Settings.")
+    }
+
+    public func itemList(tag: String, account: String?) throws -> [ItemSummary] {
         try preflight()
-        let args = buildArgs(["item", "list", "--tags", tag])
+        let args = buildArgs(["item", "list", "--tags", tag], account: account)
         let result = try runProcess(args: args)
         guard result.exitCode == 0 else {
             throw OpClientError.processFailed(stderr: result.stderr, exitCode: result.exitCode)
@@ -108,8 +195,8 @@ public final class OpClient: WhoamiProvider {
         return try decode([ItemSummary].self, from: result.stdout)
     }
 
-    public func itemGet(id: String) throws -> FullItem {
-        let args = buildArgs(["item", "get", id])
+    public func itemGet(id: String, account: String?) throws -> FullItem {
+        let args = buildArgs(["item", "get", id], account: account)
         let result = try runProcess(args: args)
         guard result.exitCode == 0 else {
             throw OpClientError.processFailed(stderr: result.stderr, exitCode: result.exitCode)
@@ -170,7 +257,7 @@ public final class OpClient: WhoamiProvider {
 
     // MARK: - Subprocess primitives
 
-    private func buildArgs(_ command: [String]) -> [String] {
+    private func buildArgs(_ command: [String], account: String?) -> [String] {
         var args = command
         if let account, !account.isEmpty {
             args.append(contentsOf: ["--account", account])

@@ -156,7 +156,15 @@ Agent reads `~/Library/Application Support/passwordfiller/config.json`:
 
 Legacy 0.3.x configs (only the first two keys) auto-migrate with defaults via per-key `decodeIfPresent` fallbacks in `Config.init(from:)`.
 
-The `op` CLI is bundled at `Contents/Resources/op`; fallback search order is `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, then `$PATH`.
+The `op` CLI is **not bundled** — re-signing it strips the AgileBits signature and 1Password's desktop-app-auth then rejects it ("couldn't connect to desktop app"). It is installed via `installer -pkg` to `/usr/local/bin/op`. `OpClient.resolveOpPath` search order: `Bundle.main` resource (absent in shipping builds) → `/opt/homebrew/bin` → `/usr/local/bin` → `/opt/local/bin` → `$PATH`.
+
+`op_account` is a **hint, not a hard filter**. Before each refresh the Agent runs `op account list` and reconciles `op_account` against the accounts `op` actually knows (`OpClient.resolveAccountArgument`):
+
+- `op_account` matches an account (by URL, email, user ID or account ID) → that account is used.
+- No match but exactly one account exists → that account is used; the stale `op_account` is ignored (self-heals configs carried over from old installs).
+- No match with multiple accounts, or empty `op_account` with multiple accounts → refresh fails with an actionable `accountUnavailable` error; the Agent never guesses, since a wrong pick could fill credentials from the wrong vault.
+
+The sign-in URL in `op account list` is per-user (one colleague signs in via `firma.1password.com`, another via `my.1password.com` for the same tenant), so `op_account` can never be a reliable org-wide constant — the reconciliation step is what makes it work regardless.
 
 ## URL matching
 

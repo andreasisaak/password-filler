@@ -195,7 +195,14 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         store.ttl = TimeInterval(max(1, config.cacheTtlDays) * 86_400)
 
         do {
-            let summaries = try opClient.itemList(tag: config.opTag)
+            // Reconcile the configured `op_account` against the accounts `op`
+            // actually knows. A stale/wrong `op_account` (e.g. carried over
+            // from an old install) self-heals here when only one account
+            // exists, instead of failing every refresh.
+            let accountArgument = try opClient.resolveAccountArgument()
+            log.info("Resolved op account: \(accountArgument ?? "<none>", privacy: .public)")
+
+            let summaries = try opClient.itemList(tag: config.opTag, account: accountArgument)
             log.info("Fetched \(summaries.count, privacy: .public) item summaries")
 
             // Prefilter to items that carry at least one URL — avoids kicking
@@ -211,7 +218,7 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
                 ItemStore.extractHostnames(from: $0.urls).isEmpty
             }
 
-            let fetched = await fanOutItemGet(for: withHosts)
+            let fetched = await fanOutItemGet(for: withHosts, account: accountArgument)
             let stored = fetched.compactMap(\.stored)
 
             store.replace(with: stored)
@@ -270,7 +277,8 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
     /// pile up in its queue and the later ones time out. 5 keeps the queue
     /// healthy and still gives ~6× the serial-port throughput.
     private func fanOutItemGet(
-        for withHosts: [(summary: ItemSummary, hostnames: [String])]
+        for withHosts: [(summary: ItemSummary, hostnames: [String])],
+        account: String?
     ) async -> [FetchResult] {
         let opClient = self.opClient
         let maxInFlight = 5
@@ -285,9 +293,9 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
                     inFlight -= 1
                 }
                 inFlight += 1
-                group.addTask { [log] in
+                group.addTask { [log, account] in
                     do {
-                        let full = try opClient.itemGet(id: summary.id)
+                        let full = try opClient.itemGet(id: summary.id, account: account)
                         let creds = ItemStore.extractCredentials(from: full.fields ?? [])
                         let stored: StoredItem? = creds.map { c in
                             let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
@@ -342,6 +350,8 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         case OpClientError.binaryNotFound: return "op binary not found"
         case OpClientError.timeout(let command): return "op timeout: \(command)"
         case OpClientError.decodingFailed(let reason): return "op decode error: \(reason)"
+        case OpClientError.accountUnavailable(let reason):
+            return reason
         case OpClientError.processFailed(let stderr, let code):
             return "op exit \(code): \(stderr.prefix(120))"
         default:

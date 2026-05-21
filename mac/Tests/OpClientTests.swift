@@ -101,4 +101,99 @@ final class OpClientTests: XCTestCase {
             XCTAssertEqual(error as? OpClientError, .binaryNotFound)
         }
     }
+
+    // MARK: - Account resolution (pure policy, no subprocess)
+
+    private static let businessAccount = OpAccount(
+        url: "louis-internet.1password.com",
+        email: "isaak@louis.info",
+        userId: "U5LD53POUBF5RGGWLCAAJD7IXE",
+        accountId: "ACCT-LOUIS"
+    )
+    private static let personalAccount = OpAccount(
+        url: "my.1password.com",
+        email: "andy.jared@googlemail.com",
+        userId: "B3LXZYKGGNC27PBEILATJT6EEA",
+        accountId: "ACCT-PERSONAL"
+    )
+
+    func testResolveAccountReturnsMatchByURL() throws {
+        let resolved = try OpClient.resolveAccount(
+            configured: "louis-internet.1password.com",
+            accounts: [Self.personalAccount, Self.businessAccount]
+        )
+        XCTAssertEqual(resolved, "louis-internet.1password.com")
+    }
+
+    func testResolveAccountMatchesByEmailAndAccountId() throws {
+        let byEmail = try OpClient.resolveAccount(
+            configured: "isaak@louis.info",
+            accounts: [Self.personalAccount, Self.businessAccount]
+        )
+        XCTAssertEqual(byEmail, "louis-internet.1password.com")
+
+        let byAccountId = try OpClient.resolveAccount(
+            configured: "ACCT-LOUIS",
+            accounts: [Self.personalAccount, Self.businessAccount]
+        )
+        XCTAssertEqual(byAccountId, "louis-internet.1password.com")
+    }
+
+    func testResolveAccountSelfHealsStaleConfigWhenOnlyOneAccount() throws {
+        // Sven's case: config carries a wrong `op_account` from an old install,
+        // but `op` knows exactly one account — resolve to it instead of failing.
+        let resolved = try OpClient.resolveAccount(
+            configured: "louis-internet.1password.com",
+            accounts: [Self.personalAccount]
+        )
+        XCTAssertEqual(resolved, "my.1password.com")
+    }
+
+    func testResolveAccountThrowsWhenStaleConfigAndMultipleAccounts() {
+        // No safe guess possible — wrong pick could fill the wrong vault.
+        XCTAssertThrowsError(
+            try OpClient.resolveAccount(
+                configured: "nonexistent.1password.com",
+                accounts: [Self.personalAccount, Self.businessAccount]
+            )
+        ) { error in
+            guard case OpClientError.accountUnavailable = error else {
+                return XCTFail("Expected .accountUnavailable, got \(error)")
+            }
+        }
+    }
+
+    func testResolveAccountUsesSingleAccountWhenConfigEmpty() throws {
+        XCTAssertEqual(
+            try OpClient.resolveAccount(configured: "", accounts: [Self.businessAccount]),
+            "louis-internet.1password.com"
+        )
+        XCTAssertEqual(
+            try OpClient.resolveAccount(configured: nil, accounts: [Self.personalAccount]),
+            "my.1password.com"
+        )
+    }
+
+    func testResolveAccountThrowsWhenConfigEmptyAndMultipleAccounts() {
+        XCTAssertThrowsError(
+            try OpClient.resolveAccount(
+                configured: nil,
+                accounts: [Self.personalAccount, Self.businessAccount]
+            )
+        ) { error in
+            guard case OpClientError.accountUnavailable = error else {
+                return XCTFail("Expected .accountUnavailable, got \(error)")
+            }
+        }
+    }
+
+    func testResolveAccountThrowsWhenNoAccountsExist() {
+        XCTAssertThrowsError(
+            try OpClient.resolveAccount(configured: "team.1password.com", accounts: [])
+        ) { error in
+            guard case OpClientError.accountUnavailable = error else {
+                return XCTFail("Expected .accountUnavailable, got \(error)")
+            }
+        }
+    }
 }
