@@ -44,6 +44,9 @@ let store = ItemStore(ttl: ttlSeconds, persistence: persistentCache)
 let opClient = OpClient(account: initialConfig.opAccount.isEmpty ? nil : initialConfig.opAccount)
 let identityUpdater = IdentityStoreUpdater()
 
+// One trust boundary shared by both IPC entrypoints (XPC + Unix socket).
+let authorizer = PeerAuthorizer()
+
 let agentService = AgentService(
     store: store,
     opClient: opClient,
@@ -57,7 +60,8 @@ let agentService = AgentService(
         configBox.set(fresh)
         return fresh
     },
-    identityUpdater: identityUpdater
+    identityUpdater: identityUpdater,
+    authorizer: authorizer
 )
 
 // MARK: - XPC listener
@@ -69,7 +73,7 @@ lifecycleLog.info("XPC listener resumed on \(PFMachService.name, privacy: .publi
 
 // MARK: - Unix socket server
 
-let socketServer = UnixSocketServer(service: agentService)
+let socketServer = UnixSocketServer(service: agentService, authorizer: authorizer)
 do {
     try socketServer.start()
 } catch {

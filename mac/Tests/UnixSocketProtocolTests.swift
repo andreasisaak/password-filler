@@ -43,7 +43,11 @@ final class UnixSocketProtocolTests: XCTestCase {
         )
         service.setConnectionState(.connected)
 
-        server = UnixSocketServer(service: service, socketURL: socketURL)
+        server = UnixSocketServer(
+            service: service,
+            authorizer: PeerAuthorizer(requirement: nil), // hermetic: no gate over the temp socket
+            socketURL: socketURL
+        )
         try server.start()
     }
 

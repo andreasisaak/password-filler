@@ -47,7 +47,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
             configReloader: { try configStore.load() },
             identityUpdater: nil,
             auditStore: auditStore,
-            codeSigningRequirement: nil // hermetic: no gate over the anonymous listener
+            authorizer: PeerAuthorizer(requirement: nil) // hermetic: no gate over the anonymous listener
         )
         service.setConnectionState(.connected)
 

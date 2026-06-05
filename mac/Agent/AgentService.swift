@@ -12,13 +12,8 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
     private let configReloader: () throws -> Config
     private let identityUpdater: IdentityStoreUpdater?
     let auditStore: AuditStore
-    private let codeSigningRequirement: String?
+    private let authorizer: PeerAuthorizer
     private let log = Logger(subsystem: "app.passwordfiller.agent", category: "xpc")
-
-    /// Pins XPC peers to our Team OU (not a single identifier — Main-App and
-    /// CredProvider.appex have distinct identifiers but share the OU).
-    public static let defaultCodeSigningRequirement =
-        "anchor apple generic and certificate leaf[subject.OU] = \"\(PFMachService.teamId)\""
 
     /// Serializes state mutation. Refresh work runs off the main queue but hits
     /// this queue for the shared-state updates.
@@ -35,7 +30,7 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         configReloader: @escaping () throws -> Config,
         identityUpdater: IdentityStoreUpdater? = nil,
         auditStore: AuditStore = AuditStore(),
-        codeSigningRequirement: String? = AgentService.defaultCodeSigningRequirement
+        authorizer: PeerAuthorizer = PeerAuthorizer()
     ) {
         self.store = store
         self.opClient = opClient
@@ -43,7 +38,7 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         self.configReloader = configReloader
         self.identityUpdater = identityUpdater
         self.auditStore = auditStore
-        self.codeSigningRequirement = codeSigningRequirement
+        self.authorizer = authorizer
         super.init()
         // Best-effort eager load so `getAuditFindings` works before the first
         // refresh completes. A decode failure is non-fatal — `current` stays empty.
@@ -162,10 +157,8 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         _ listener: NSXPCListener,
         shouldAcceptNewConnection newConnection: NSXPCConnection
     ) -> Bool {
-        // Must be set before resume(); nil accepts all peers (tests).
-        if let codeSigningRequirement {
-            newConnection.setCodeSigningRequirement(codeSigningRequirement)
-        }
+        // Must be gated before resume(); a disabled authorizer accepts all.
+        authorizer.gate(newConnection)
         let interface = NSXPCInterface(with: AgentServiceProtocol.self)
         newConnection.exportedInterface = interface
         newConnection.exportedObject = self

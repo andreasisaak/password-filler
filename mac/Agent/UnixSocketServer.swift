@@ -18,6 +18,7 @@ public final class UnixSocketServer {
 
     private let socketURL: URL
     private let service: AgentService
+    private let authorizer: PeerAuthorizer
     private let log = Logger(subsystem: "app.passwordfiller.agent", category: "socket")
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
@@ -26,9 +27,11 @@ public final class UnixSocketServer {
 
     public init(
         service: AgentService,
+        authorizer: PeerAuthorizer = PeerAuthorizer(),
         socketURL: URL = UnixSocketServer.defaultSocketURL
     ) {
         self.service = service
+        self.authorizer = authorizer
         self.socketURL = socketURL
     }
 
@@ -73,8 +76,8 @@ public final class UnixSocketServer {
             throw SocketError.setup("bind() failed errno=\(errno)")
         }
 
-        // UID boundary only — no peer code-identity check yet (unlike the XPC
-        // listener). Same-user peer verification is a planned follow-up.
+        // UID boundary; peer code-identity is checked per-connection in the
+        // accept loop via PeerAuthorizer (mirrors the XPC gate).
         _ = Darwin.chmod(socketURL.path, 0o600)
 
         guard Darwin.listen(socketFD, 16) == 0 else {
@@ -119,6 +122,11 @@ public final class UnixSocketServer {
                 if errno == EAGAIN || errno == EWOULDBLOCK { return }
                 log.error("accept() failed errno=\(errno, privacy: .public)")
                 return
+            }
+            guard authorizer.authorize(socketFD: client) else {
+                log.error("rejected unauthorized socket peer")
+                Darwin.close(client)
+                continue
             }
             workQueue.async { [weak self] in
                 self?.handleClient(socketFD: client)
