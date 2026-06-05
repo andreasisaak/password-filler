@@ -46,7 +46,8 @@ final class AgentXPCIntegrationTests: XCTestCase {
             configProvider: { (try? configStore.load()) ?? Config() },
             configReloader: { try configStore.load() },
             identityUpdater: nil,
-            auditStore: auditStore
+            auditStore: auditStore,
+            codeSigningRequirement: nil // hermetic: no gate over the anonymous listener
         )
         service.setConnectionState(.connected)
 

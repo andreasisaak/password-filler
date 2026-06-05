@@ -5,6 +5,10 @@ import Foundation
 /// Well-known identifiers shared between the Agent and its XPC clients
 /// (Main-App, CredProvider.appex, NMH-bridge).
 public enum PFMachService {
+    /// Apple Developer Team ID. Single source for the OU pinned in code-signing
+    /// requirements and embedded in the app-group / Mach-Service prefixes.
+    public static let teamId = "A5278RL7RX"
+
     /// App-Group-prefixed Mach-Service name. Must match the `MachServices` key in
     /// `app.passwordfiller.agent.plist` exactly. No `.xpc` suffix — that convention
     /// is for XPC-Service bundle products, not LaunchAgent-hosted Mach-Services

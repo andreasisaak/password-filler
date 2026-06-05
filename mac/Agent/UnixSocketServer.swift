@@ -73,8 +73,8 @@ public final class UnixSocketServer {
             throw SocketError.setup("bind() failed errno=\(errno)")
         }
 
-        // User-only permissions on the socket file (defense in depth — Shared
-        // Keychain + XPC are the real security boundaries).
+        // UID boundary only — no peer code-identity check yet (unlike the XPC
+        // listener). Same-user peer verification is a planned follow-up.
         _ = Darwin.chmod(socketURL.path, 0o600)
 
         guard Darwin.listen(socketFD, 16) == 0 else {
