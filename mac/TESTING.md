@@ -92,9 +92,20 @@ mismatch in 1Password item.
 4. Try a Basic-Auth fill for a cached host. Popover status should evict
    the entry on next lookup — fill should trigger a fresh browser challenge
    or a refresh.
+5. **Expired-cache escalation:** once every item is evicted, within 30 s
+   (hidden-poll cadence) the menu-bar icon switches to the warning lock
+   (`lock.trianglebadge.exclamationmark`), the popover header shows „Cache
+   abgelaufen" with the „Klicke auf ‚Aktualisieren'…" hint, and **one** user
+   notification „Passwort-Cache abgelaufen" is delivered. Clicking
+   „Aktualisieren" (plus Touch-ID) restores the green „Verbunden" state and
+   the plain lock icon.
 
 - [ ] TTL change persists across restarts
 - [ ] Eviction observable on next lookup past TTL
+- [ ] Menu-bar icon escalates to warning lock within 30 s of full eviction
+- [ ] Popover shows „Cache abgelaufen" + refresh hint instead of „Verbunden · 0 Einträge"
+- [ ] Exactly one notification per expiry episode (no repeat per poll)
+- [ ] Refresh restores „Verbunden" and the normal lock icon
 
 ## 6. App-Rename Test (FR EC-3)
 

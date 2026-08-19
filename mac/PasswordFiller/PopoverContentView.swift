@@ -113,8 +113,17 @@ private struct StatusRow: View {
         }
     }
 
+    /// Escalation for the "connected but every item aged out" state — the raw
+    /// `connectionState` stays `.connected`, so all four display slots below
+    /// branch on this before switching on the state. Keep in sync with
+    /// `MenuBarIconView` in `PasswordFillerApp`.
+    private var cacheExpired: Bool {
+        status?.isCacheExpired() ?? false
+    }
+
     private var iconName: String {
         if error != nil { return "exclamationmark.triangle.fill" }
+        if cacheExpired { return "clock.badge.exclamationmark" }
         guard let state = status?.connectionState else { return "questionmark.circle" }
         switch state {
         case .connected:      return "lock.fill"
@@ -127,6 +136,7 @@ private struct StatusRow: View {
 
     private var iconColor: Color {
         if error != nil { return .orange }
+        if cacheExpired { return .orange }
         switch status?.connectionState {
         case .connected:      return .green
         case .locked:         return .yellow
@@ -141,6 +151,7 @@ private struct StatusRow: View {
         // right form for 1 vs N automatically.
         if error != nil { return String(localized: "Agent unreachable") }
         guard let status else { return String(localized: "Connecting…") }
+        if cacheExpired { return String(localized: "Cache expired") }
         switch status.connectionState {
         case .connected:     return String(localized: "Connected · \(status.itemCount) items")
         case .locked:        return String(localized: "1Password locked")
@@ -151,15 +162,24 @@ private struct StatusRow: View {
     }
 
     private var secondaryLine: String? {
-        // Priority: transient XPC error > persisted agent error > TTL info.
+        // Priority: transient XPC error > expired cache > persisted agent
+        // error > TTL info.
         if let error { return error }
         guard let status else { return nil }
+        if cacheExpired {
+            return String(localized: "Click Refresh to sign in to 1Password again.")
+        }
         // Surface the persisted reason for any non-connected state so the
         // user sees *why* the agent is unhappy, not just that it is.
         if status.connectionState != .connected, let msg = status.errorMessage {
             return msg
         }
         if status.connectionState == .connected {
+            // Sub-day TTLs (the `cache_ttl_minutes` debug override) truncate
+            // `ttlDays` to 0 — show minutes instead of "0 days".
+            if let ttlSeconds = status.ttlSeconds, ttlSeconds < 86_400 {
+                return String(localized: "Cache TTL: \(ttlSeconds / 60) minutes")
+            }
             // Plural-variant catalog key "Cache TTL: %lld days" → DE picks
             // "Cache-TTL: N Tag" vs "Cache-TTL: N Tage" automatically.
             return String(localized: "Cache TTL: \(status.ttlDays) days")

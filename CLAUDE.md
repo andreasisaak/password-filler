@@ -51,12 +51,13 @@ xcodebuild -project mac/PasswordFiller.xcodeproj -scheme PasswordFiller -configu
 
 ## Tests
 
-77 XCTests across 8 suites in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
+115 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
 
 - `ItemStoreTests` — URL-matching (8 fixtures), TTL eviction, vault merge, credential extraction, hostname extraction, sharedSuffixLength
 - `MergeLogicTests` (inline in ItemStoreTests) — multi-vault collapse
 - `CacheTtlTests` (inline in ItemStoreTests) — eviction past TTL, live TTL mutation
 - `OpClientTests` — `parseWhoami` pure-function tests covering authenticated / locked / noAccounts / unknown
+- `CacheStalenessTests` — `AgentStatus.isCacheExpired` derivation (expired-cache escalation)
 - `ConfigStoreTests` — legacy migration, snake-case round-trip, atomic writes
 - `RevokePollerTests` — state machine + ItemStore eviction wiring
 - `PublicSuffixListTests` — eTLD+1 resolution
@@ -156,6 +157,8 @@ Agent reads `~/Library/Application Support/passwordfiller/config.json`:
 
 Legacy 0.3.x configs (only the first two keys) auto-migrate with defaults via per-key `decodeIfPresent` fallbacks in `Config.init(from:)`.
 
+Optional debug/test key `cache_ttl_minutes` (not exposed in the Settings UI): when present it overrides `cache_ttl_days` (`Config.effectiveCacheTtlSeconds`) — set e.g. `30` to observe TTL eviction and the expired-cache escalation within minutes instead of days. Remove the key to return to the day-based TTL. Sub-day TTLs surface via `AgentStatus.ttlSeconds`; the popover then shows "Cache-TTL: N Minuten".
+
 The `op` CLI is **not bundled** — re-signing it strips the AgileBits signature and 1Password's desktop-app-auth then rejects it ("couldn't connect to desktop app"). It is installed via `installer -pkg` to `/usr/local/bin/op`. `OpClient.resolveOpPath` search order: `Bundle.main` resource (absent in shipping builds) → `/opt/homebrew/bin` → `/usr/local/bin` → `/opt/local/bin` → `$PATH`.
 
 `op_account` is a **hint, not a hard filter**. Before each refresh the Agent runs `op account list` and reconciles `op_account` against the accounts `op` actually knows (`OpClient.resolveAccountArgument`):
@@ -189,6 +192,7 @@ Section match wins if present, even if top-level fields also exist.
 
 - Agent cache lives in-memory in `ItemStore` and is **persisted encrypted** to disk via `PersistentCache` (AES-256-GCM with a per-Mac key in the macOS Keychain). Cache survives Mac reboot and Agent respawn — no Touch-ID prompt needed before Basic-Auth fills work after login.
 - TTL configurable 1/3/7/14/30 days (default 7); evicted on read past TTL.
+- **Expired-cache escalation:** `AgentService.getStatus` reports the TTL-pruned item count, and the Main-App derives `AgentStatus.isCacheExpired` (`mac/Shared/CacheStaleness.swift`: connected + 0 items + lastRefresh ≥ one TTL window) to escalate — warning menu-bar icon (`lock.trianglebadge.exclamationmark`), „Cache abgelaufen" popover state, and one user notification per transition (`StaleCacheNotifier`, edge-triggered, re-nudges once per app launch). Rationale: the Agent seeds `connectionState = .connected` from the persisted cache at launch and nothing re-evaluates it after eviction — without the derivation the UI shows „Verbunden · 0 Einträge" forever while fills silently fail.
 - Active revoke polling via `op whoami` every 30 min (+ on `NSWorkspace.didWakeNotification` debounced 5 s) invalidates both the in-memory cache and the on-disk snapshot when 1Password access is revoked. The offboarding guarantee (revoke 1P ⇒ no access anywhere) is preserved despite the on-disk cache.
 - Extension holds no cache — every `onAuthRequired` round-trips through the `pf-nmh-bridge` to the Agent.
 - Native messaging timeout: 30 s per message.

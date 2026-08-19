@@ -87,10 +87,16 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
     }
 
     public func getStatus(reply: @escaping (Data?) -> Void) {
+        // `allItems()` (not `count`) so TTL-expired entries are pruned before
+        // we report the number. The Main-App derives its "cache expired —
+        // refresh required" escalation and the autoRefresh-on-launch guard
+        // from this count; an unpruned value would hide the expiry until the
+        // next `listItems`/`lookup` call happens to prune.
         let status = AgentStatus(
-            itemCount: store.count,
+            itemCount: store.allItems().count,
             lastRefresh: store.lastRefresh,
             ttlDays: Int(store.ttl / 86_400),
+            ttlSeconds: Int(store.ttl),
             connectionState: connectionState,
             errorMessage: lastErrorMessage
         )
@@ -109,8 +115,8 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
             // propagate via `configProvider` — `opTag` reaches the next refresh
             // naturally, `opAccount` needs an Agent restart (OpClient captures
             // it at init time). Settings UI documents that caveat.
-            store.ttl = TimeInterval(max(1, fresh.cacheTtlDays) * 86_400)
-            log.info("Config reloaded: ttlDays=\(fresh.cacheTtlDays, privacy: .public)")
+            store.ttl = fresh.effectiveCacheTtlSeconds
+            log.info("Config reloaded: ttlSeconds=\(fresh.effectiveCacheTtlSeconds, privacy: .public)")
             let result = ReloadConfigResult(
                 success: true,
                 ttlDays: fresh.cacheTtlDays,

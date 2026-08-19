@@ -42,9 +42,17 @@ final class AgentXPCClient {
     /// surfaces this in the status row. Cleared on next successful poll.
     private(set) var connectionError: String?
 
+    /// Derived "cache expired — user must refresh" flag. Single source for the
+    /// menu-bar warning icon and the popover status row; the transition-edge
+    /// notification runs through `StaleCacheNotifier` on every status poll.
+    var cacheExpired: Bool {
+        status?.isCacheExpired() ?? false
+    }
+
     // MARK: - Private
 
     private let log = Logger(subsystem: "app.passwordfiller.main", category: "xpc")
+    private let staleNotifier = StaleCacheNotifier()
     private var connection: NSXPCConnection?
     private var pollTask: Task<Void, Never>?
 
@@ -238,6 +246,7 @@ final class AgentXPCClient {
             }
             status = fresh
             connectionError = nil
+            staleNotifier.statusDidUpdate(fresh)
         } catch {
             log.debug("getStatus XPC error: \(String(describing: error), privacy: .public)")
             connectionError = Self.userFacingMessage(for: error)

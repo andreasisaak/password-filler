@@ -441,6 +441,51 @@
         }
       }
     },
+    "Cache expired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cache abgelaufen"
+          }
+        }
+      }
+    },
+    "Cache expired, refresh required" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cache abgelaufen, Aktualisierung erforderlich"
+          }
+        }
+      }
+    },
+    "Cache TTL: %lld minutes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Cache-TTL: %lld Minute"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Cache-TTL: %lld Minuten"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Cache TTL: %lld days" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -522,6 +567,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Chrome, Firefox und Brave benötigen die Password-Filler-Erweiterung aus dem jeweiligen Store."
+          }
+        }
+      }
+    },
+    "Click Refresh to sign in to 1Password again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke auf „Aktualisieren“, um dich erneut bei 1Password anzumelden."
           }
         }
       }
@@ -1128,6 +1184,17 @@
         }
       }
     },
+    "Open Password Filler and click Refresh to sign in to 1Password again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne Password Filler und klicke auf „Aktualisieren“, um dich erneut bei 1Password anzumelden."
+          }
+        }
+      }
+    },
     "Open Safari AutoFill" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1135,6 +1202,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Safari-AutoFill öffnen"
+          }
+        }
+      }
+    },
+    "Password cache expired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwort-Cache abgelaufen"
           }
         }
       }

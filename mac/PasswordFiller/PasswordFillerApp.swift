@@ -1,6 +1,7 @@
 import SwiftUI
 import ServiceManagement
 import Sparkle
+import UserNotifications
 import os.log
 
 // Phase-4 Main-App shell: menu-bar-only SwiftUI app (`LSUIElement=true`) that
@@ -100,6 +101,10 @@ private struct MenuBarIconView: View {
     /// the menu-bar icon should agree on the state at any moment.
     private var iconName: String {
         if client.connectionError != nil { return "lock.trianglebadge.exclamationmark" }
+        // Escalate the expired cache even though the raw state is `.connected`
+        // — a plain closed lock hides that fills stopped working and the user
+        // must refresh (and re-authenticate with 1Password).
+        if client.cacheExpired { return "lock.trianglebadge.exclamationmark" }
         guard let state = client.status?.connectionState else { return "lock.fill" }
         switch state {
         case .connected:     return "lock.fill"
@@ -117,6 +122,9 @@ private struct MenuBarIconView: View {
         // String — we pre-resolve the key → locale via the catalog here.
         if client.connectionError != nil {
             return String(localized: "Password Filler — \(String(localized: "Agent unreachable"))")
+        }
+        if client.cacheExpired {
+            return String(localized: "Password Filler — \(String(localized: "Cache expired, refresh required"))")
         }
         guard let state = client.status?.connectionState else {
             return String(localized: "Password Filler — \(String(localized: "Connecting…"))")
@@ -145,6 +153,7 @@ private struct MenuBarIconView: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        requestNotificationAuthorization()
         registerLaunchAgent()
         NMHManifestWriter.write(bridgePath: NMHManifestWriter.currentBridgePath())
         pingAgent()
@@ -156,6 +165,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // activation flag can steal focus from the menu-bar attachment.
         Task { @MainActor in
             OnboardingWindowController.showIfNeeded()
+        }
+    }
+
+    /// One-time system prompt (macOS remembers the answer across launches).
+    /// Requested at launch — not lazily at the first stale-cache transition —
+    /// so the very first expired-cache notification can be delivered even
+    /// when the user is away from the Mac at transition time.
+    private func requestNotificationAuthorization() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if let error {
+                lifecycleLog.error("Notification authorization failed: \(String(describing: error), privacy: .public)")
+            } else {
+                lifecycleLog.info("Notification authorization granted=\(granted, privacy: .public)")
+            }
         }
     }
 

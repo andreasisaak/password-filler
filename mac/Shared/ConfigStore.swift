@@ -8,6 +8,11 @@ public struct Config: Codable, Equatable, Sendable {
     public var opAccount: String
     public var opTag: String
     public var cacheTtlDays: Int
+    /// Debug/test override for the cache TTL, in minutes. Not exposed in the
+    /// Settings UI — set by hand in `config.json` to observe TTL eviction and
+    /// the expired-cache escalation without waiting days. When present it wins
+    /// over `cacheTtlDays`; remove the key to return to the day-based TTL.
+    public var cacheTtlMinutes: Int?
     public var autoStart: Bool
     public var autoRefreshOnStart: Bool
 
@@ -15,20 +20,33 @@ public struct Config: Codable, Equatable, Sendable {
         opAccount: String = "",
         opTag: String = ".htaccess",
         cacheTtlDays: Int = 7,
+        cacheTtlMinutes: Int? = nil,
         autoStart: Bool = true,
         autoRefreshOnStart: Bool = true
     ) {
         self.opAccount = opAccount
         self.opTag = opTag
         self.cacheTtlDays = cacheTtlDays
+        self.cacheTtlMinutes = cacheTtlMinutes
         self.autoStart = autoStart
         self.autoRefreshOnStart = autoRefreshOnStart
+    }
+
+    /// Effective cache TTL in seconds. Both sources are clamped to at least
+    /// one unit so a hand-edited zero can never produce an instant-evict
+    /// cache.
+    public var effectiveCacheTtlSeconds: TimeInterval {
+        if let cacheTtlMinutes {
+            return TimeInterval(max(1, cacheTtlMinutes) * 60)
+        }
+        return TimeInterval(max(1, cacheTtlDays) * 86_400)
     }
 
     private enum CodingKeys: String, CodingKey {
         case opAccount = "op_account"
         case opTag = "op_tag"
         case cacheTtlDays = "cache_ttl_days"
+        case cacheTtlMinutes = "cache_ttl_minutes"
         case autoStart = "auto_start"
         case autoRefreshOnStart = "auto_refresh_on_start"
     }
@@ -39,6 +57,7 @@ public struct Config: Codable, Equatable, Sendable {
         self.opAccount = try c.decodeIfPresent(String.self, forKey: .opAccount) ?? defaults.opAccount
         self.opTag = try c.decodeIfPresent(String.self, forKey: .opTag) ?? defaults.opTag
         self.cacheTtlDays = try c.decodeIfPresent(Int.self, forKey: .cacheTtlDays) ?? defaults.cacheTtlDays
+        self.cacheTtlMinutes = try c.decodeIfPresent(Int.self, forKey: .cacheTtlMinutes)
         self.autoStart = try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart
         self.autoRefreshOnStart = try c.decodeIfPresent(Bool.self, forKey: .autoRefreshOnStart) ?? defaults.autoRefreshOnStart
     }

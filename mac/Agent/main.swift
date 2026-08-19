@@ -34,7 +34,7 @@ final class ConfigBox: @unchecked Sendable {
 }
 let configBox = ConfigBox(initialConfig)
 
-let ttlSeconds = TimeInterval(max(1, initialConfig.cacheTtlDays) * 86_400)
+let ttlSeconds = initialConfig.effectiveCacheTtlSeconds
 // Persistent, encrypted on-disk cache. ItemStore eagerly loads the last
 // snapshot from disk here so the Agent is warm on Mac-reboot — Basic-Auth
 // lookups work immediately, without waiting for the user to reopen the

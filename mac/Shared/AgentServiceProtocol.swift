@@ -124,6 +124,12 @@ public struct AgentStatus: Codable, Equatable, Sendable {
     public let itemCount: Int
     public let lastRefresh: Date?
     public let ttlDays: Int
+    /// Exact TTL in seconds. `ttlDays` truncates sub-day TTLs (the
+    /// `cache_ttl_minutes` debug override) to 0, so consumers that compute
+    /// with the TTL (expired-cache derivation, minute-granular display) use
+    /// this field. Optional for wire compatibility with payloads that predate
+    /// it — `nil` falls back to `ttlDays`.
+    public let ttlSeconds: Int?
     public let connectionState: ConnectionState
     /// Human-readable explanation of the last non-transient failure. Set by
     /// the refresh pipeline when it hits an error, cleared on the next
@@ -136,29 +142,32 @@ public struct AgentStatus: Codable, Equatable, Sendable {
         itemCount: Int,
         lastRefresh: Date?,
         ttlDays: Int,
+        ttlSeconds: Int? = nil,
         connectionState: ConnectionState,
         errorMessage: String? = nil
     ) {
         self.itemCount = itemCount
         self.lastRefresh = lastRefresh
         self.ttlDays = ttlDays
+        self.ttlSeconds = ttlSeconds
         self.connectionState = connectionState
         self.errorMessage = errorMessage
     }
 
     // Backwards-compatible decode for any cached payloads that predate the
-    // `errorMessage` field.
+    // `errorMessage` / `ttlSeconds` fields.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.itemCount = try c.decode(Int.self, forKey: .itemCount)
         self.lastRefresh = try c.decodeIfPresent(Date.self, forKey: .lastRefresh)
         self.ttlDays = try c.decode(Int.self, forKey: .ttlDays)
+        self.ttlSeconds = try c.decodeIfPresent(Int.self, forKey: .ttlSeconds)
         self.connectionState = try c.decode(ConnectionState.self, forKey: .connectionState)
         self.errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case itemCount, lastRefresh, ttlDays, connectionState, errorMessage
+        case itemCount, lastRefresh, ttlDays, ttlSeconds, connectionState, errorMessage
     }
 }
 

@@ -59,6 +59,29 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertTrue(loaded.autoRefreshOnStart)
     }
 
+    func testCacheTtlMinutesRoundTripAndEffectiveSeconds() throws {
+        let store = ConfigStore(url: tempURL)
+        var config = Config(cacheTtlDays: 7)
+        config.cacheTtlMinutes = 30
+        try store.save(config)
+
+        let loaded = try store.load()
+        XCTAssertEqual(loaded.cacheTtlMinutes, 30)
+        XCTAssertEqual(loaded.effectiveCacheTtlSeconds, 30 * 60)
+    }
+
+    func testAbsentCacheTtlMinutesFallsBackToDays() throws {
+        let store = ConfigStore(url: tempURL)
+        try store.save(Config(cacheTtlDays: 3))
+
+        let loaded = try store.load()
+        XCTAssertNil(loaded.cacheTtlMinutes)
+        XCTAssertEqual(loaded.effectiveCacheTtlSeconds, 3 * 86_400)
+        // Nil must stay an absent key on disk, not "cache_ttl_minutes": null.
+        let raw = try String(contentsOf: tempURL, encoding: .utf8)
+        XCTAssertFalse(raw.contains("cache_ttl_minutes"))
+    }
+
     func testSaveUsesSnakeCaseOnDisk() throws {
         let store = ConfigStore(url: tempURL)
         try store.save(Config(
