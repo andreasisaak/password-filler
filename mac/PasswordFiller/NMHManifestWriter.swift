@@ -13,9 +13,12 @@ import os.log
 // on every Main-App launch. Browsers re-read the manifest the next time an
 // extension calls `connectNative`, so the repair is effectively zero-latency.
 //
-// Skip silently if the parent browser directory does not exist — we do not
-// want to leave orphan Application-Support folders for browsers the user
-// has never installed.
+// Manifests are written only for browsers whose app bundle LaunchServices
+// actually knows (`BrowserCatalog.Browser.isInstalled`) — the mere existence
+// of the browser's Application-Support directory proves nothing, because
+// 1Password creates those directories for every browser it supports. For
+// browsers that are not installed, a previously written manifest is removed
+// so uninstalling a browser leaves nothing of ours behind.
 
 enum NMHManifestWriter {
 
@@ -25,66 +28,27 @@ enum NMHManifestWriter {
     static let chromeExtensionID = "ebcpahcihmnibmplnblcikgjiicmpcff"
     static let firefoxExtensionID = "passwordfiller@app"
 
-    struct BrowserTarget {
-        enum Dialect { case chromium, firefox }
-        let displayName: String
-        /// Parent Application-Support directory that must already exist for
-        /// the browser to be considered "installed".
-        let browserDir: URL
-        let dialect: Dialect
-    }
-
     static func write(bridgePath: String) {
-        let targets = enabledTargets()
-        for target in targets {
-            writeManifest(for: target, bridgePath: bridgePath)
+        for browser in BrowserCatalog.all {
+            if browser.isInstalled {
+                writeManifest(for: browser, bridgePath: bridgePath)
+            } else {
+                removeStaleManifest(for: browser)
+            }
         }
     }
 
-    // MARK: - Target discovery
-
-    private static func enabledTargets() -> [BrowserTarget] {
-        let supportDir = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-
-        let candidates: [BrowserTarget] = [
-            BrowserTarget(
-                displayName: "Google Chrome",
-                browserDir: supportDir.appendingPathComponent("Google/Chrome", isDirectory: true),
-                dialect: .chromium
-            ),
-            BrowserTarget(
-                displayName: "Google Chrome Beta",
-                browserDir: supportDir.appendingPathComponent("Google/Chrome Beta", isDirectory: true),
-                dialect: .chromium
-            ),
-            BrowserTarget(
-                displayName: "Brave Browser",
-                browserDir: supportDir.appendingPathComponent("BraveSoftware/Brave-Browser", isDirectory: true),
-                dialect: .chromium
-            ),
-            BrowserTarget(
-                displayName: "Vivaldi",
-                browserDir: supportDir.appendingPathComponent("Vivaldi", isDirectory: true),
-                dialect: .chromium
-            ),
-            BrowserTarget(
-                displayName: "Firefox",
-                browserDir: supportDir.appendingPathComponent("Mozilla", isDirectory: true),
-                dialect: .firefox
-            ),
-        ]
-
-        return candidates.filter { target in
-            var isDir: ObjCBool = false
-            let exists = FileManager.default.fileExists(atPath: target.browserDir.path, isDirectory: &isDir)
-            return exists && isDir.boolValue
-        }
+    /// Manifest location for one browser — shared with the Settings security
+    /// tab so its status probe checks the exact file this writer maintains.
+    static func manifestURL(for browser: BrowserCatalog.Browser) -> URL {
+        browser.supportDirectory
+            .appendingPathComponent("NativeMessagingHosts", isDirectory: true)
+            .appendingPathComponent("\(hostName).json", isDirectory: false)
     }
 
     // MARK: - Manifest payload
 
-    private static func manifest(bridgePath: String, dialect: BrowserTarget.Dialect) -> [String: Any] {
+    private static func manifest(bridgePath: String, dialect: BrowserCatalog.Dialect) -> [String: Any] {
         var payload: [String: Any] = [
             "name": hostName,
             "description": "Password Filler Native Messaging Host",
@@ -100,36 +64,53 @@ enum NMHManifestWriter {
         return payload
     }
 
-    private static func writeManifest(for target: BrowserTarget, bridgePath: String) {
-        let nmhDir = target.browserDir.appendingPathComponent("NativeMessagingHosts", isDirectory: true)
-        let manifestURL = nmhDir.appendingPathComponent("\(hostName).json", isDirectory: false)
+    private static func writeManifest(for browser: BrowserCatalog.Browser, bridgePath: String) {
+        let manifestURL = manifestURL(for: browser)
 
         do {
-            try FileManager.default.createDirectory(at: nmhDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: manifestURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
         } catch {
-            log.error("mkdir failed for \(target.displayName, privacy: .public): \(String(describing: error), privacy: .public)")
+            log.error("mkdir failed for \(browser.displayName, privacy: .public): \(String(describing: error), privacy: .public)")
             return
         }
 
-        let payload = manifest(bridgePath: bridgePath, dialect: target.dialect)
+        let payload = manifest(bridgePath: bridgePath, dialect: browser.dialect)
         let data: Data
         do {
             data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
         } catch {
-            log.error("JSON encode failed for \(target.displayName, privacy: .public)")
+            log.error("JSON encode failed for \(browser.displayName, privacy: .public)")
             return
         }
 
         if let existing = try? Data(contentsOf: manifestURL), existing == data {
-            log.debug("manifest already up-to-date for \(target.displayName, privacy: .public)")
+            log.debug("manifest already up-to-date for \(browser.displayName, privacy: .public)")
             return
         }
 
         do {
             try data.write(to: manifestURL, options: [.atomic])
-            log.info("wrote NMH manifest for \(target.displayName, privacy: .public) → \(manifestURL.path, privacy: .public)")
+            log.info("wrote NMH manifest for \(browser.displayName, privacy: .public) → \(manifestURL.path, privacy: .public)")
         } catch {
-            log.error("write failed for \(target.displayName, privacy: .public): \(String(describing: error), privacy: .public)")
+            log.error("write failed for \(browser.displayName, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Removes a manifest this app wrote for a browser that is no longer
+    /// installed. Only our own `app.passwordfiller.json` is touched — the
+    /// directory and other publishers' manifests stay untouched.
+    private static func removeStaleManifest(for browser: BrowserCatalog.Browser) {
+        let manifestURL = manifestURL(for: browser)
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else { return }
+
+        do {
+            try FileManager.default.removeItem(at: manifestURL)
+            log.info("removed stale NMH manifest for \(browser.displayName, privacy: .public) — browser not installed")
+        } catch {
+            log.error("stale-manifest removal failed for \(browser.displayName, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     }
 

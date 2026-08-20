@@ -261,7 +261,7 @@ private struct SecurityTab: View {
             } header: {
                 Text("Browser integration")
             } footer: {
-                Text("Manifests are refreshed automatically on every app start. If a browser is missing here, it has not been launched yet.")
+                Text("Manifests are refreshed automatically on every app start. Only installed browsers are listed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -386,13 +386,12 @@ private struct SecurityTab: View {
 
     private struct BrowserRow: Identifiable {
         enum Status {
-            case ready, manifestMissing, browserAbsent
+            case ready, manifestMissing
 
             var iconName: String {
                 switch self {
                 case .ready: return "checkmark.circle.fill"
                 case .manifestMissing: return "exclamationmark.triangle.fill"
-                case .browserAbsent: return "minus.circle"
                 }
             }
 
@@ -400,7 +399,6 @@ private struct SecurityTab: View {
                 switch self {
                 case .ready: return .green
                 case .manifestMissing: return .orange
-                case .browserAbsent: return .secondary
                 }
             }
 
@@ -408,7 +406,6 @@ private struct SecurityTab: View {
                 switch self {
                 case .ready: return String(localized: "Available")
                 case .manifestMissing: return String(localized: "Manifest missing — restart the app once")
-                case .browserAbsent: return String(localized: "Not installed")
                 }
             }
         }
@@ -417,35 +414,19 @@ private struct SecurityTab: View {
         let displayName: String
         let status: Status
 
-        /// Probe Chrome/Chrome Beta/Brave/Vivaldi/Firefox by checking for
-        /// their NMH manifest. Safari lives in its own row (`SafariRowView`)
-        /// because it uses Credential Provider Extension + Safari Web
-        /// Extension, not NMH.
+        /// One row per installed NMH browser (LaunchServices lookup via
+        /// `BrowserCatalog`), checking for the manifest `NMHManifestWriter`
+        /// maintains. Safari lives in its own row (`SafariRowView`) because
+        /// it uses Credential Provider Extension + Safari Web Extension,
+        /// not NMH.
         static func probe() -> [BrowserRow] {
-            let support = FileManager.default
-                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-
-            let specs: [(String, String)] = [
-                ("Google Chrome",      "Google/Chrome"),
-                ("Google Chrome Beta", "Google/Chrome Beta"),
-                ("Brave Browser",      "BraveSoftware/Brave-Browser"),
-                ("Vivaldi",            "Vivaldi"),
-                ("Firefox",            "Mozilla"),
-            ]
-
-            return specs.map { display, relative -> BrowserRow in
-                let browserDir = support.appendingPathComponent(relative, isDirectory: true)
-                let manifest = browserDir
-                    .appendingPathComponent("NativeMessagingHosts", isDirectory: true)
-                    .appendingPathComponent("\(NMHManifestWriter.hostName).json", isDirectory: false)
-
-                var isDir: ObjCBool = false
-                let browserExists = FileManager.default.fileExists(atPath: browserDir.path, isDirectory: &isDir) && isDir.boolValue
-                if !browserExists {
-                    return BrowserRow(displayName: display, status: .browserAbsent)
-                }
-                let manifestExists = FileManager.default.fileExists(atPath: manifest.path)
-                return BrowserRow(displayName: display, status: manifestExists ? .ready : .manifestMissing)
+            BrowserCatalog.all.filter(\.isInstalled).map { browser in
+                let manifestExists = FileManager.default
+                    .fileExists(atPath: NMHManifestWriter.manifestURL(for: browser).path)
+                return BrowserRow(
+                    displayName: browser.displayName,
+                    status: manifestExists ? .ready : .manifestMissing
+                )
             }
         }
     }

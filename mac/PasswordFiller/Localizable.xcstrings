@@ -997,13 +997,13 @@
         }
       }
     },
-    "Manifests are refreshed automatically on every app start. If a browser is missing here, it has not been launched yet." : {
+    "Manifests are refreshed automatically on every app start. Only installed browsers are listed." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Manifeste werden bei jedem Start der App automatisch erneuert. Falls ein Browser hier fehlt, wurde er bisher nicht gestartet."
+            "value" : "Manifeste werden bei jedem Start der App automatisch erneuert. Es werden nur installierte Browser angezeigt."
           }
         }
       }
@@ -1125,17 +1125,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht konfiguriert"
-          }
-        }
-      }
-    },
-    "Not installed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht installiert"
           }
         }
       }
