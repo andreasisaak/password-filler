@@ -156,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestNotificationAuthorization()
         registerLaunchAgent()
         NMHManifestWriter.write(bridgePath: NMHManifestWriter.currentBridgePath())
+        reapStaleBridges()
         pingAgent()
         // Present the first-launch wizard iff `config.json` is missing. Kept
         // last so the other lifecycle work always runs — if the wizard never
@@ -179,6 +180,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 lifecycleLog.info("Notification authorization granted=\(granted, privacy: .public)")
             }
+        }
+    }
+
+    /// D24: off the main thread — enumerating every PID plus one Security
+    /// lookup per bridge takes tens of milliseconds and must not delay the
+    /// menu-bar UI.
+    private func reapStaleBridges() {
+        let bridgePath = NMHManifestWriter.currentBridgePath()
+        DispatchQueue.global(qos: .utility).async {
+            StaleBridgeReaper.reap(currentBridgePath: bridgePath)
         }
     }
 

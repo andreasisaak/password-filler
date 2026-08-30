@@ -15,6 +15,14 @@ import Darwin
 // FR-26 silent-fail: if the Agent cannot be reached, respond
 // {"error":"agent_unreachable"} with the same framing. The extension treats
 // that as "fall back to the browser's native Basic-Auth dialog".
+//
+// D24 stale-bridge self-healing: the browser keeps this process alive for as
+// long as it runs — days or weeks — so an app update swaps the bundle
+// underneath us while we keep serving. Once the Agent restarts or rejects us
+// at its code-signing gate, an established connection breaks mid-request. We
+// then exit instead of reconnecting: the browser fires `port.onDisconnect`,
+// and the extension spawns a fresh bridge from the current bundle on its next
+// request. Reconnecting from a stale process would keep it alive forever.
 
 let socketPath: String = {
     let home = FileManager.default.homeDirectoryForCurrentUser
@@ -119,10 +127,27 @@ func launchMainApp() {
 
 let agentUnreachableBody = Data(#"{"error":"agent_unreachable"}"#.utf8)
 
+/// An established Agent connection broke mid-request (Agent restarted, or it
+/// rejected this process at its code-signing gate — see the D24 note above).
+/// Reply to the in-flight request so the extension falls back immediately,
+/// then exit so the browser respawns a fresh bridge from the current bundle.
+func exitAfterBrokenConnection(socketFD: Int32, reason: String) -> Never {
+    log("\(reason), exiting so the browser respawns a fresh bridge")
+    _ = writeFramed(fd: stdoutFD, body: agentUnreachableBody)
+    Darwin.close(socketFD)
+    exit(1)
+}
+
 // MARK: - Main loop
 
 let stdinFD = FileHandle.standardInput.fileDescriptor
 let stdoutFD = FileHandle.standardOutput.fileDescriptor
+
+// A write to a socket the Agent already closed (Agent restart) or to a stdout
+// the browser already closed must surface as EPIPE, not SIGPIPE — the default
+// action would kill us before we can reply to the in-flight request and log
+// why we exit. Both branches below rely on `writeFramed` returning `false`.
+signal(SIGPIPE, SIG_IGN)
 
 var socketFD: Int32 = connectSocket()
 var launchAttempted = false
@@ -156,19 +181,11 @@ while let request = readFramed(fd: stdinFD) {
     }
 
     if !writeFramed(fd: socketFD, body: request) {
-        log("socket write failed, reconnecting next request")
-        Darwin.close(socketFD)
-        socketFD = -1
-        _ = writeFramed(fd: stdoutFD, body: agentUnreachableBody)
-        continue
+        exitAfterBrokenConnection(socketFD: socketFD, reason: "socket write failed")
     }
 
     guard let response = readFramed(fd: socketFD) else {
-        log("socket read failed, reconnecting next request")
-        Darwin.close(socketFD)
-        socketFD = -1
-        _ = writeFramed(fd: stdoutFD, body: agentUnreachableBody)
-        continue
+        exitAfterBrokenConnection(socketFD: socketFD, reason: "socket read failed")
     }
 
     if !writeFramed(fd: stdoutFD, body: response) {

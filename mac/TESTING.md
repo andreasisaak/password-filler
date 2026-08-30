@@ -141,10 +141,16 @@ mismatch in 1Password item.
 6. Sparkle should detect the newer version, download, verify, prompt once,
    silent-install without admin password, and auto-relaunch on the new version.
 7. Menu-bar icon reappears, About-tab shows the new version string.
+8. Keep Chrome (or Brave/Firefox) running across steps 5-7 with the extension
+   loaded. Within 30 s after the relaunch the toolbar badge shows the green ✓
+   again, and a Basic-Auth URL fills **without** restarting the browser.
+   `/usr/bin/log show --predicate 'subsystem == "app.passwordfiller.main"' --last 5m | grep bridge-reaper`
+   lists the terminated stale `pf-nmh-bridge` PIDs (D24).
 
 - [ ] Update detected
 - [ ] No admin password prompt
 - [ ] Relaunch lands on new version
+- [ ] Badge green + fill works without browser restart (stale bridges reaped)
 
 ## 9. Merge-Display (Multi-Vault Case)
 

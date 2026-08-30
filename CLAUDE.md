@@ -51,7 +51,7 @@ xcodebuild -project mac/PasswordFiller.xcodeproj -scheme PasswordFiller -configu
 
 ## Tests
 
-115 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
+118 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
 
 - `ItemStoreTests` — URL-matching (8 fixtures), TTL eviction, vault merge, credential extraction, hostname extraction, sharedSuffixLength
 - `MergeLogicTests` (inline in ItemStoreTests) — multi-vault collapse
@@ -64,6 +64,7 @@ xcodebuild -project mac/PasswordFiller.xcodeproj -scheme PasswordFiller -configu
 - `AgentXPCIntegrationTests` — every `AgentServiceProtocol` method over an anonymous `NSXPCListener`
 - `UnixSocketProtocolTests` — UInt32-LE + UTF-8-JSON framing against a temp socket
 - `BackwardsCompatTests` — golden-fixture regression guards for the v0.3.x wire shape
+- `BridgeStalenessTests` — D24 stale-bridge verdict (cdhash match / mismatch / failed identity lookup)
 
 Run: `xcodebuild test -project mac/PasswordFiller.xcodeproj -scheme PasswordFillerTests -destination 'platform=macOS,arch=arm64'`.
 
@@ -88,6 +89,8 @@ lsregister -r -domain user
 (`lsregister` lives at `/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister`.)
 
 The shipped `pf-install.sh` script does this automatically for `mac/build/Debug/PasswordFiller.app` after copying to `/Applications/`.
+
+**Stale bridges after a bundle swap:** swapping `/Applications/PasswordFiller.app` while Chrome/Brave/Firefox run leaves their `pf-nmh-bridge` processes on the old code. The Main-App reaps them on launch (D24); check with `/usr/bin/log show --predicate 'subsystem == "app.passwordfiller.main"' --last 5m | grep bridge-reaper`. On builds ≤ v1.4.1: `pkill -f pf-nmh-bridge`.
 
 **Agent registration architecture:** `launchctl bootstrap` is the only supported path. SMAppService was removed because of an AMFI-LWCR self-constraint mismatch on macOS 26.4.x that SIGKILLed the agent on every spawn. See [specs/launchagent-bypass-smappservice.md](specs/launchagent-bypass-smappservice.md). **Do not re-introduce SMAppService.**
 
@@ -195,6 +198,7 @@ Section match wins if present, even if top-level fields also exist.
 - **Expired-cache escalation:** `AgentService.getStatus` reports the TTL-pruned item count, and the Main-App derives `AgentStatus.isCacheExpired` (`mac/Shared/CacheStaleness.swift`: connected + 0 items + lastRefresh ≥ one TTL window) to escalate — warning menu-bar icon (`lock.trianglebadge.exclamationmark`), „Cache abgelaufen" popover state, and one user notification per transition (`StaleCacheNotifier`, edge-triggered, re-nudges once per app launch). Rationale: the Agent seeds `connectionState = .connected` from the persisted cache at launch and nothing re-evaluates it after eviction — without the derivation the UI shows „Verbunden · 0 Einträge" forever while fills silently fail.
 - Active revoke polling via `op whoami` every 30 min (+ on `NSWorkspace.didWakeNotification` debounced 5 s) invalidates both the in-memory cache and the on-disk snapshot when 1Password access is revoked. The offboarding guarantee (revoke 1P ⇒ no access anywhere) is preserved despite the on-disk cache.
 - Extension holds no cache — every `onAuthRequired` round-trips through the `pf-nmh-bridge` to the Agent.
+- **Stale-bridge self-healing (D24):** browsers keep `pf-nmh-bridge` alive for as long as they run, so any bundle swap (Sparkle update, DMG drag-drop, dev build) leaves old bridge processes serving. Once the old bundle is gone, the Agent's `PeerAuthorizer` cannot resolve their code identity (`SecCodeCopyGuestWithAttributes` → `100002` = ENOENT) and rejects them — red `!` badge, every lookup falls back to the browser dialog until the browser restarts. Fix is two-sided: the bridge exits on a broken established connection (browser fires `onDisconnect`, the extension respawns within ≤30 s via its status alarm), and the Main-App terminates every bridge whose cdhash differs from the bundled one on each launch (`StaleBridgeReaper`, verdict in `mac/Shared/BridgeStaleness.swift`). Bridges from builds without the fix (≤ v1.4.1) need one manual `pkill -f pf-nmh-bridge` or a browser restart.
 - Native messaging timeout: 30 s per message.
 - `op item get` fan-out is bounded to 5 in flight (1Password's desktop-app-auth daemon serializes auth checks per parent process; 30+ simultaneous calls pile up in its queue and the later ones time out).
 
