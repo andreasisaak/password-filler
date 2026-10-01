@@ -84,6 +84,29 @@ Wildcards in URLs are not glob-expanded — `*.example.com` matches `app.example
 
 The Agent runs in the background as a LaunchAgent and re-launches automatically after reboot. Cache survives reboot (encrypted with a per-Mac AES-256-GCM key), so Basic-Auth fills work immediately after login without a fresh Touch-ID prompt.
 
+## For AI agents
+
+Coding agents such as Claude Code can reach htaccess-protected sites through Password Filler without the credentials appearing in the conversation. There are three paths:
+
+- **Claude in Chrome** — the agent opens the URL in your Chrome, and the Password Filler extension answers the login as it does for you.
+- **Playwright MCP with `--extension`** — Playwright drives your real Chrome (this needs the Playwright MCP Bridge extension in that Chrome), so the extension fills the login. In its default mode Playwright MCP launches its own browser without the extension and gets `401`.
+- **curl, scripts and Playwright tests** — `password-filler-mcp run` exports the credentials for the URL's host as `HTACCESS_USER` / `HTACCESS_PASSWORD` to the command, the same pattern as `dotenvx run`:
+
+  ```bash
+  password-filler-mcp run --url https://staging.example.com/ -- sh -c 'curl -sS -u "$HTACCESS_USER:$HTACCESS_PASSWORD" https://staging.example.com/'
+  ```
+
+  Keep the single quotes around the `sh -c` script: with double quotes the calling shell expands the variables before `run` has set them.
+
+To turn it on, open `Settings → For AI Agents` and enable **Enable local MCP server**. This creates the symlink `/usr/local/bin/password-filler-mcp` into the app; macOS asks for an administrator password once if that directory is not writable. Turning the switch off blocks all requests but keeps the symlink; remove it with `sudo rm /usr/local/bin/password-filler-mcp`. Then install the Claude Code plugin, which adds the MCP server (tool `list_hosts`, hostnames only) and a skill that tells Claude which path to take:
+
+```text
+/plugin marketplace add andreasisaak/password-filler
+/plugin install password-filler@password-filler
+```
+
+**What this protects and what it does not.** The agent never receives the credentials as text. A command it starts with `run` does, and could print them — the same level as environment variables from `dotenvx`. The switch is consent, not a barrier against malicious software running as your user. While it is off, `run` exits with code 77 and the MCP server reports an error.
+
 ## Updates
 
 The macOS app auto-updates via [Sparkle 2.x](https://sparkle-project.org). Updates are signed with ed25519 and silently installed without an admin prompt — no `.pkg` postinstall, no privilege escalation. Click `Settings → About → Check for Updates` to check manually.
@@ -96,6 +119,8 @@ The Chrome/Firefox/Brave extensions auto-update via the Chrome Web Store and Fir
 - The cache is encrypted at rest with a per-Mac AES-256-GCM key stored in the macOS Keychain — credentials are never written to disk in plaintext
 - When you revoke 1Password access (`op signout` or removing the account), the next refresh fails with `noAccounts` and the cache is wiped on the next poll cycle (≤30 min, debounced on wake)
 - The XPC channel between Agent and Main-App / Safari extensions is restricted by Mach-Service name to processes signed with team ID `A5278RL7RX`
+- The Agent answers the Native-Messaging bridge only when a supported browser started it, so a script cannot launch the bridge by hand to read credentials. This is a hurdle against accidental misuse, not a defense against malicious software running as your user
+- `password-filler-mcp` gets hostnames and `run` credentials only while `Settings → For AI Agents` is switched on, and cannot use the actions reserved for the browser extensions (`lookup`)
 - Logs use Apple's unified logging system with the `app.passwordfiller.*` subsystem. Hostnames and credentials are tagged `private` and only visible to processes running under your user
 
 ## Troubleshooting
@@ -119,7 +144,7 @@ For private fields (hostnames, credentials), use `log stream --level=debug --pre
 
 **Manual smoke checklist**
 
-The full QA checklist for releases is in [`mac/TESTING.md`](mac/TESTING.md) — 11 scenarios covering every browser, Touch-ID lifecycle, offboarding, app-rename, Sparkle round-trip, and uninstall.
+The full QA checklist for releases is in [`mac/TESTING.md`](mac/TESTING.md) — 13 scenarios covering every browser, Touch-ID lifecycle, offboarding, app-rename, Sparkle round-trip, and uninstall.
 
 ## Repository layout
 
@@ -130,9 +155,12 @@ mac/                Native macOS app (Swift + xcodegen)
   CredProvider/     Safari ASCredentialProvider extension
   SafariExt/        Safari Web Extension
   NMHBridge/        pf-nmh-bridge stdio ↔ socket proxy
-  Tests/            XCTest unit + integration suites (77 tests)
+  MCPServer/        password-filler-mcp: MCP server + `run` for AI agents
+  Tests/            XCTest unit + integration suites (166 tests)
   TESTING.md        Manual smoke-test checklist
 extension/          MV3 extension for Chrome/Firefox/Brave (proxy-only)
+claude-plugin/      Claude Code plugin (skill + MCP server config)
+.claude-plugin/     Plugin marketplace manifest for this repo
 installer/          Shared entitlements + ExportOptions
 scripts/            CWS ZIP builder + Sparkle appcast updater
 specs/v1-mac-app/   Requirements, design, plan

@@ -189,6 +189,66 @@ Walk all four tabs. After each toggle / text-field edit:
 - [ ] Agent fully gone after next login
 - [ ] Basic-Auth falls back to native dialog
 
+## 12. Bridge parent check (D25)
+
+The Agent serves `pf-nmh-bridge` only when a supported browser spawned it
+(`mac/Shared/SupportedBrowsers.swift`). A browser missing from that list
+loses autofill, so check every installed one after changing the list or
+`PeerAuthorizer`. `staging.example.com` below stands for any host with a
+`.htaccess` item. The check stops a bridge started by hand; it does not stop
+a deliberately malicious same-user process (see D25 trade-offs).
+
+1. In each installed browser (Chrome, Chrome Beta, Brave, Vivaldi, Firefox,
+   Firefox Developer Edition, Firefox Nightly) with the extension loaded,
+   open a Basic-Auth URL → page loads without a dialog, toolbar badge green.
+2. Confirm the bridge parents (one line pair per running bridge):
+   `for p in $(pgrep -f pf-nmh-bridge); do pp=$(ps -o ppid= -p $p | tr -d ' '); codesign -dv "$(ps -o comm= -p $pp)" 2>&1 | grep -E '^Identifier|TeamIdentifier'; done`
+3. Start the bridge by hand with a `lookup` frame:
+   `python3 -c 'import json,struct,sys;b=json.dumps({"action":"lookup","hostname":"staging.example.com"}).encode();sys.stdout.buffer.write(struct.pack("<I",len(b))+b)' | /Applications/PasswordFiller.app/Contents/MacOS/pf-nmh-bridge | tail -c +5`
+   → prints `{"error":"agent_unreachable"}`, no credentials.
+4. Check the rejection log:
+   `/usr/bin/log show --predicate 'subsystem == "app.passwordfiller.agent" AND category == "auth"' --last 5m`
+   → `rejected pf-nmh-bridge (pid=…, parentPid=…, parentIdentifier=com.apple.…, parentTeamId=nil, …)`.
+
+- [ ] Autofill works in every installed browser
+- [ ] Every bridge parent is a browser main process listed in `SupportedBrowsers`
+- [ ] Hand-started bridge gets `agent_unreachable`
+- [ ] Rejection is logged with parent PID, identifier, Team ID and OSStatus
+
+## 13. AI-agent access (`password-filler-mcp`)
+
+Covers `Settings → For AI Agents` and the bundled `password-filler-mcp`
+(specs/ai-agent-access). Never print the credential variables while testing.
+`staging.example.com` stands for any host with a `.htaccess` item.
+Steps 2–6 (except 3's script body) are automated:
+`mac/scripts/dev/agent-access-smoke.sh https://staging.example.com/` checks the
+expectations matching the current switch state.
+
+1. Turn on **Enable local MCP server**. If `/usr/local/bin` is not writable
+   the macOS administrator prompt appears. Afterwards
+   `ls -la /usr/local/bin/password-filler-mcp` shows a symlink into the
+   running bundle, and the tab shows "Installed at …".
+2. curl through `run` (prints `200`):
+   `password-filler-mcp run --url https://staging.example.com/ -- sh -c 'curl -s -o /dev/null -w "%{http_code}" -u "$HTACCESS_USER:$HTACCESS_PASSWORD" https://staging.example.com/'`
+3. A Playwright script reading `HTACCESS_USER` / `HTACCESS_PASSWORD` for
+   `http_credentials`, started through `run`, loads the same page with
+   status 200.
+4. MCP handshake and `list_hosts` (the reply lists the staging host, no
+   credentials):
+   `printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_hosts"}}' | password-filler-mcp`
+5. Unknown host → exit 65 with a hint; `--url ftp://x` → exit 64 with usage.
+6. Turn the switch off → step 2 exits 77 without running curl, step 4
+   returns `"isError":true`; the symlink stays.
+7. Move the app to `~/Applications/` with the switch on and relaunch → the
+   symlink is re-pointed to the new location.
+
+- [ ] Switch on installs the symlink (administrator prompt if needed)
+- [ ] `run` + curl returns 200; Playwright through `run` returns 200
+- [ ] `list_hosts` lists hostnames only
+- [ ] Error exits 64 / 65 behave as described
+- [ ] Switch off: `run` exits 77, `list_hosts` reports an error, symlink kept
+- [ ] Moved app: symlink repaired on launch
+
 ---
 
 ## Cross-Machine Verification

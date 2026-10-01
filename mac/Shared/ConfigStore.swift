@@ -15,6 +15,9 @@ public struct Config: Codable, Equatable, Sendable {
     public var cacheTtlMinutes: Int?
     public var autoStart: Bool
     public var autoRefreshOnStart: Bool
+    /// "For AI Agents" switch: lets `password-filler-mcp` list hosts and hand
+    /// credentials to a child process via `run`. Off by default.
+    public var mcpEnabled: Bool
 
     public init(
         opAccount: String = "",
@@ -22,7 +25,8 @@ public struct Config: Codable, Equatable, Sendable {
         cacheTtlDays: Int = 7,
         cacheTtlMinutes: Int? = nil,
         autoStart: Bool = true,
-        autoRefreshOnStart: Bool = true
+        autoRefreshOnStart: Bool = true,
+        mcpEnabled: Bool = false
     ) {
         self.opAccount = opAccount
         self.opTag = opTag
@@ -30,6 +34,7 @@ public struct Config: Codable, Equatable, Sendable {
         self.cacheTtlMinutes = cacheTtlMinutes
         self.autoStart = autoStart
         self.autoRefreshOnStart = autoRefreshOnStart
+        self.mcpEnabled = mcpEnabled
     }
 
     /// Effective cache TTL in seconds. Both sources are clamped to at least
@@ -49,6 +54,7 @@ public struct Config: Codable, Equatable, Sendable {
         case cacheTtlMinutes = "cache_ttl_minutes"
         case autoStart = "auto_start"
         case autoRefreshOnStart = "auto_refresh_on_start"
+        case mcpEnabled = "mcp_enabled"
     }
 
     public init(from decoder: Decoder) throws {
@@ -60,6 +66,7 @@ public struct Config: Codable, Equatable, Sendable {
         self.cacheTtlMinutes = try c.decodeIfPresent(Int.self, forKey: .cacheTtlMinutes)
         self.autoStart = try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? defaults.autoStart
         self.autoRefreshOnStart = try c.decodeIfPresent(Bool.self, forKey: .autoRefreshOnStart) ?? defaults.autoRefreshOnStart
+        self.mcpEnabled = try c.decodeIfPresent(Bool.self, forKey: .mcpEnabled) ?? defaults.mcpEnabled
     }
 }
 

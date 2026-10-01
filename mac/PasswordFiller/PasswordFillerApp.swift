@@ -158,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NMHManifestWriter.write(bridgePath: NMHManifestWriter.currentBridgePath())
         reapStaleBridges()
         pingAgent()
+        CommandLineToolInstaller.repairIfMoved()
         // Present the first-launch wizard iff `config.json` is missing. Kept
         // last so the other lifecycle work always runs — if the wizard never
         // opens (config exists) the menu-bar UI comes up normally. The

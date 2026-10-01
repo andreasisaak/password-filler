@@ -6,7 +6,7 @@ import os.log
 
 // Phase-4 Settings window (plan task 4.3).
 //
-// Four tabs bound to the same shared Config. Changes auto-persist —
+// Five tabs bound to the same shared Config. Changes auto-persist —
 // toggles / dropdowns commit immediately, text fields commit on `.onSubmit`
 // (Enter) or focus loss. Every successful persist also asks the Agent to
 // reload config so the TTL window takes effect in-session without a restart.
@@ -50,6 +50,10 @@ struct SettingsView: View {
             SecurityTab()
                 .tabItem { Label("Security", systemImage: "lock.shield") }
                 .tag(SettingsTab.security)
+
+            AIAgentsTab(draft: $draft, onChange: scheduleSave)
+                .tabItem { Label("For AI Agents", systemImage: "sparkles") }
+                .tag(SettingsTab.aiAgents)
 
             AboutTab(updater: updater)
                 .tabItem { Label("About", systemImage: "info.circle") }
@@ -109,7 +113,7 @@ struct SettingsView: View {
 // MARK: - Tab enum (tag type)
 
 private enum SettingsTab: Hashable {
-    case general, onePassword, security, about
+    case general, onePassword, security, aiAgents, about
 }
 
 // MARK: - Save indicator

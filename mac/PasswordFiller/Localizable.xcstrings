@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ belongs to another program and was not replaced." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ gehört zu einem anderen Programm und wurde nicht ersetzt."
+          }
+        }
+      }
+    },
     ".htaccess" : {
       "shouldTranslate" : false
     },
@@ -170,6 +181,171 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Claude Code plugin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude-Code-Plugin"
+          }
+        }
+      }
+    },
+    "Command" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehl"
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopieren"
+          }
+        }
+      }
+    },
+    "Could not read %@: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ konnte nicht gelesen werden: %2$@"
+          }
+        }
+      }
+    },
+    "Enable local MCP server" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokalen MCP-Server aktivieren"
+          }
+        }
+      }
+    },
+    "For AI Agents" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für KI-Agenten"
+          }
+        }
+      }
+    },
+    "Install command" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehl installieren"
+          }
+        }
+      }
+    },
+    "Installed at %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installiert unter %@"
+          }
+        }
+      }
+    },
+    "Installing the command failed: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installation des Befehls fehlgeschlagen: %@"
+          }
+        }
+      }
+    },
+    "Lets Claude Code and other AI agents reach htaccess-protected sites. They never see the passwords; a command started with password-filler-mcp run receives them as environment variables and could print them." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Damit erreichen Claude Code und andere KI-Agenten htaccess-geschützte Seiten. Sie sehen die Passwörter nie; ein mit password-filler-mcp run gestarteter Befehl bekommt sie als Umgebungsvariablen und könnte sie ausgeben."
+          }
+        }
+      }
+    },
+    "Not installed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht installiert"
+          }
+        }
+      }
+    },
+    "Points to another app: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt auf eine andere App: %@"
+          }
+        }
+      }
+    },
+    "Run both commands in Claude Code. The plugin tells Claude how to use Password Filler." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beide Befehle in Claude Code ausführen. Das Plugin erklärt Claude, wie es Password Filler nutzt."
+          }
+        }
+      }
+    },
+    "Status unknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status unbekannt"
+          }
+        }
+      }
+    },
+    "The administrator prompt was cancelled." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Administrator-Abfrage wurde abgebrochen."
           }
         }
       }

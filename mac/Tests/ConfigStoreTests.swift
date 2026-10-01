@@ -22,7 +22,8 @@ final class ConfigStoreTests: XCTestCase {
             opTag: ".htaccess",
             cacheTtlDays: 14,
             autoStart: false,
-            autoRefreshOnStart: true
+            autoRefreshOnStart: true,
+            mcpEnabled: true
         )
         try store.save(config)
 
@@ -39,6 +40,7 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual(loaded.cacheTtlDays, 7)
         XCTAssertTrue(loaded.autoStart)
         XCTAssertTrue(loaded.autoRefreshOnStart)
+        XCTAssertFalse(loaded.mcpEnabled)
     }
 
     func testLegacyConfigMigratesWithDefaults() throws {
@@ -57,6 +59,7 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual(loaded.cacheTtlDays, 7)
         XCTAssertTrue(loaded.autoStart)
         XCTAssertTrue(loaded.autoRefreshOnStart)
+        XCTAssertFalse(loaded.mcpEnabled, "configs written before the AI-agent switch must keep it off")
     }
 
     func testCacheTtlMinutesRoundTripAndEffectiveSeconds() throws {

@@ -1,0 +1,17 @@
+{
+  "name": "password-filler",
+  "owner": {
+    "name": "Andreas Isaak"
+  },
+  "metadata": {
+    "description": "Claude Code plugin for Password Filler: reach htaccess-protected sites without the credentials appearing in the conversation."
+  },
+  "plugins": [
+    {
+      "name": "password-filler",
+      "source": "./claude-plugin",
+      "description": "Lets Claude reach HTTP Basic Auth (htaccess) sites through Password Filler and 1Password — in Chrome, Playwright and scripts — without the credentials appearing in the conversation.",
+      "category": "security"
+    }
+  ]
+}

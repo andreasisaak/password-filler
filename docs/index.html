@@ -49,6 +49,7 @@
       <a href="#how" class="text-neutral-600 hover:text-neutral-900 transition">How it works</a>
       <a href="#browsers" class="text-neutral-600 hover:text-neutral-900 transition">Browsers</a>
       <a href="#privacy" class="text-neutral-600 hover:text-neutral-900 transition">Privacy</a>
+      <a href="#ai-agents" class="hidden sm:inline text-neutral-600 hover:text-neutral-900 transition">AI agents</a>
       <a href="https://github.com/andreasisaak/password-filler" class="text-neutral-600 hover:text-neutral-900 transition flex items-center gap-1.5">
         <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18.92-.26 1.91-.39 2.89-.39.98 0 1.97.13 2.89.39 2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.07.78 2.16v3.2c0 .31.21.67.8.56C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
         GitHub
@@ -228,6 +229,52 @@
           GPL-3.0 source on GitHub, auditable line by line. Apple-notarized DMG passes Gatekeeper without overrides. Updates are ed25519-signed via Sparkle 2 and install silently — no admin prompt, no <code class="text-neutral-900 bg-neutral-100 px-1 rounded">.pkg</code> scripts. The Safari extension and credential provider run in Apple's App Sandbox.
         </p>
       </div>
+    </div>
+  </section>
+
+  <!-- For AI agents -->
+  <section id="ai-agents" class="max-w-6xl mx-auto px-6 py-20">
+    <h2 class="text-3xl font-bold tracking-tight text-center mb-4">For AI agents</h2>
+    <p class="text-neutral-600 text-center mb-16 max-w-2xl mx-auto">
+      Claude Code and other coding agents reach your htaccess-protected staging, dev and production sites — without the credentials appearing in the conversation.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> Claude in Chrome
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          The agent opens the URL in your Chrome. The Password Filler extension answers the login exactly as it does for you — no dialog, nothing typed.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> Playwright MCP
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          Start Playwright MCP with <code class="text-neutral-900 bg-neutral-100 px-1 rounded">--extension</code> and it drives your real Chrome (with the Playwright MCP Bridge extension installed), so the extension fills the login. Its own fresh browser would get a 401.
+        </p>
+      </div>
+      <div class="card-grad border border-neutral-200 rounded-2xl p-6">
+        <h3 class="font-semibold flex items-center gap-2">
+          <span class="text-indigo-600">●</span> curl, scripts, tests
+        </h3>
+        <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
+          <code class="text-neutral-900 bg-neutral-100 px-1 rounded">password-filler-mcp run --url &lt;url&gt; -- sh -c '…'</code> hands the credentials for that host to the command as environment variables — like <code class="text-neutral-900 bg-neutral-100 px-1 rounded">dotenvx run</code>.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-8 card-grad border border-neutral-200 rounded-2xl p-6 text-sm text-neutral-600 leading-relaxed">
+      <p>
+        Turn it on in <code class="text-neutral-900 bg-neutral-100 px-1 rounded">Settings → For AI Agents</code>, then add the plugin in Claude Code:
+        <code class="text-neutral-900 bg-neutral-100 px-1 rounded">/plugin marketplace add andreasisaak/password-filler</code> and
+        <code class="text-neutral-900 bg-neutral-100 px-1 rounded">/plugin install password-filler@password-filler</code>.
+      </p>
+      <p class="mt-3">
+        The agent never receives the credentials as text. A command it starts with <code class="text-neutral-900 bg-neutral-100 px-1 rounded">run</code> does and could print them — the same level as <code class="text-neutral-900 bg-neutral-100 px-1 rounded">dotenvx</code>. The switch is consent, not a barrier against malicious software running as your user.
+      </p>
     </div>
   </section>
 

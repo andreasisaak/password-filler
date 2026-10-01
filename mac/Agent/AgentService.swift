@@ -153,6 +153,13 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
 
     public var itemCount: Int { store.count }
 
+    /// Hostnames of all cached, unexpired items — never credentials. Reads
+    /// the cache only; unlike `list` it never triggers a refresh (and with it
+    /// Touch ID).
+    public func hostnames() -> [String] {
+        Array(Set(store.allItems().flatMap(\.hostnames))).sorted()
+    }
+
     public func currentConfig() -> Config { configProvider() }
 
     public func displayRows() -> [DisplayRow] { store.mergedForDisplay() }

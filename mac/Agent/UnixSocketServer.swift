@@ -17,9 +17,9 @@ public final class UnixSocketServer {
     }
 
     private let socketURL: URL
-    private let service: AgentService
+    let service: AgentService
     private let authorizer: PeerAuthorizer
-    private let log = Logger(subsystem: "app.passwordfiller.agent", category: "socket")
+    let log = Logger(subsystem: "app.passwordfiller.agent", category: "socket")
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
     private let acceptQueue = DispatchQueue(label: "app.passwordfiller.agent.socket.accept")
@@ -123,23 +123,24 @@ public final class UnixSocketServer {
                 log.error("accept() failed errno=\(errno, privacy: .public)")
                 return
             }
-            guard authorizer.authorize(socketFD: client) else {
+            guard let peer = authorizer.authorize(socketFD: client) else {
                 log.error("rejected unauthorized socket peer")
                 Darwin.close(client)
                 continue
             }
+            let processID = PeerAuthorizer.peerProcessID(socketFD: client)
             workQueue.async { [weak self] in
-                self?.handleClient(socketFD: client)
+                self?.handleClient(socketFD: client, peer: peer, processID: processID)
             }
         }
     }
 
     // MARK: - Per-client handler
 
-    private func handleClient(socketFD: Int32) {
+    private func handleClient(socketFD: Int32, peer: SocketPeer, processID: pid_t?) {
         defer { Darwin.close(socketFD) }
         while let request = readFramed(socketFD: socketFD) {
-            let response = dispatch(request: request)
+            let response = dispatch(request: request, peer: peer, processID: processID)
             writeFramed(socketFD: socketFD, data: response)
         }
     }
@@ -190,90 +191,6 @@ public final class UnixSocketServer {
             remaining -= sent
             offset += sent
         }
-    }
-
-    // MARK: - Dispatch
-
-    /// Matches legacy `host/htpasswd-host.js` `handleMessage`:
-    ///   - `list`/`refresh` → `{items: [...]}`
-    ///   - `lookup` → `{found: true, username, password}` on hit, `{found: false}` on miss
-    ///   - `config` → `{op_account: "…"}`
-    ///   - `ping` → `{pong: true, cached: N}`
-    ///   - unknown → `{error: "Unknown action: X"}`
-    private func dispatch(request: Data) -> Data {
-        guard let json = try? JSONSerialization.jsonObject(with: request) as? [String: Any] else {
-            return errorResponse("Invalid JSON")
-        }
-        let action = (json["action"] as? String) ?? ""
-
-        switch action {
-        case "ping":
-            return encode([
-                "pong": true,
-                "cached": service.itemCount
-            ])
-
-        case "config":
-            let cfg = service.currentConfig()
-            return encode(["op_account": cfg.opAccount])
-
-        case "lookup":
-            guard let host = json["hostname"] as? String else {
-                return errorResponse("Missing hostname")
-            }
-            if let match = service.lookup(host: host) {
-                return encode([
-                    "found": true,
-                    "username": match.username,
-                    "password": match.password
-                ])
-            }
-            return encode(["found": false])
-
-        case "list", "refresh":
-            return handleListOrRefresh()
-
-        default:
-            return errorResponse("Unknown action: \(action)")
-        }
-    }
-
-    /// Synchronously waits on the async refresh via a semaphore — the caller
-    /// protocol is request/response and the client expects the items payload
-    /// inline. 120 s covers Touch-ID (~user-speed) + parallel itemGet fan-out
-    /// across all 31-ish items with comfortable headroom.
-    private func handleListOrRefresh() -> Data {
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: RefreshResult?
-        Task { [service] in
-            result = await service.performRefresh()
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 120)
-
-        let rows = service.displayRows()
-        let items = rows.map { row -> [String: Any] in
-            [
-                "itemId": row.primaryItemId,
-                "title": row.title,
-                "hostnames": row.hostnames,
-                "domains": row.domains,
-                "sourceVaults": row.sourceVaults
-            ]
-        }
-        var payload: [String: Any] = ["items": items]
-        if let result, !result.success, let message = result.errorMessage {
-            payload["error"] = message
-        }
-        return encode(payload)
-    }
-
-    private func encode(_ dict: [String: Any]) -> Data {
-        (try? JSONSerialization.data(withJSONObject: dict)) ?? Data()
-    }
-
-    private func errorResponse(_ message: String) -> Data {
-        encode(["error": message])
     }
 
     public enum SocketError: Error, Equatable {

@@ -1,7 +1,9 @@
 import AppKit
 
-// Single source of truth for the NMH-capable browsers Password Filler
-// supports. Consumed by `NMHManifestWriter` (manifest targets) and the
+// The NMH-capable browsers Password Filler supports, grouped by the
+// Application-Support directory they read manifests from. App identities
+// come from `SupportedBrowsers`, which the Agent also uses to vet bridge
+// parents (D25). Consumed by `NMHManifestWriter` (manifest targets) and the
 // Settings security tab (integration status rows). Safari is not listed —
 // it integrates via Credential Provider + Safari Web Extension, not NMH.
 //
@@ -24,10 +26,10 @@ enum BrowserCatalog {
         /// Application-Support subdirectory whose `NativeMessagingHosts/`
         /// folder the browser reads NMH manifests from.
         let supportSubdirectory: String
-        /// Every bundle identifier whose app reads manifests from
-        /// `supportSubdirectory`. Firefox release, Developer Edition and
-        /// Nightly all share the `Mozilla` directory.
-        let bundleIdentifiers: [String]
+        /// Every app identity that reads manifests from `supportSubdirectory`.
+        /// Firefox release, Developer Edition and Nightly all share the
+        /// `Mozilla` directory.
+        let identities: [BrowserIdentity]
         let dialect: Dialect
 
         var supportDirectory: URL {
@@ -37,8 +39,8 @@ enum BrowserCatalog {
         }
 
         var isInstalled: Bool {
-            bundleIdentifiers.contains { identifier in
-                NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) != nil
+            identities.contains { identity in
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: identity.bundleIdentifier) != nil
             }
         }
     }
@@ -47,34 +49,34 @@ enum BrowserCatalog {
         Browser(
             displayName: "Google Chrome",
             supportSubdirectory: "Google/Chrome",
-            bundleIdentifiers: ["com.google.Chrome"],
+            identities: [SupportedBrowsers.chrome],
             dialect: .chromium
         ),
         Browser(
             displayName: "Google Chrome Beta",
             supportSubdirectory: "Google/Chrome Beta",
-            bundleIdentifiers: ["com.google.Chrome.beta"],
+            identities: [SupportedBrowsers.chromeBeta],
             dialect: .chromium
         ),
         Browser(
             displayName: "Brave Browser",
             supportSubdirectory: "BraveSoftware/Brave-Browser",
-            bundleIdentifiers: ["com.brave.Browser"],
+            identities: [SupportedBrowsers.brave],
             dialect: .chromium
         ),
         Browser(
             displayName: "Vivaldi",
             supportSubdirectory: "Vivaldi",
-            bundleIdentifiers: ["com.vivaldi.Vivaldi"],
+            identities: [SupportedBrowsers.vivaldi],
             dialect: .chromium
         ),
         Browser(
             displayName: "Firefox",
             supportSubdirectory: "Mozilla",
-            bundleIdentifiers: [
-                "org.mozilla.firefox",
-                "org.mozilla.firefoxdeveloperedition",
-                "org.mozilla.nightly",
+            identities: [
+                SupportedBrowsers.firefox,
+                SupportedBrowsers.firefoxDeveloperEdition,
+                SupportedBrowsers.firefoxNightly,
             ],
             dialect: .firefox
         ),

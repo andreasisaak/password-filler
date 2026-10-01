@@ -20,9 +20,15 @@ mac/                 Native macOS app (Swift, xcodegen-driven Xcode project)
   CredProvider/      Sandboxed ASCredentialProvider appex (Safari autofill)
   SafariExt/         Sandboxed Safari Web Extension appex (URL observer)
   NMHBridge/         pf-nmh-bridge: Chrome/Firefox/Brave NMH stdio ↔ socket proxy
-  Tests/             XCTest unit + integration suites (77 tests)
-  TESTING.md         Manual smoke-test checklist (11 scenarios)
+  MCPServer/         password-filler-mcp: MCP server (list_hosts) + `run` env wrapper for AI agents
+  Tests/             XCTest unit + integration suites (166 tests)
+  TESTING.md         Manual smoke-test checklist (13 scenarios)
 extension/           MV3 extension for Chrome/Firefox/Brave (proxy-only)
+claude-plugin/       Claude Code plugin (skill password-filler + .mcp.json → password-filler-mcp)
+.claude-plugin/      marketplace.json — makes this repo the plugin marketplace
+                     (`/plugin marketplace add andreasisaak/password-filler`). Bump
+                     claude-plugin/.claude-plugin/plugin.json `version` on every
+                     plugin change, or installed copies never update.
 installer/           Shared entitlements + ExportOptions for xcodebuild
 scripts/             CWS ZIP builder + Sparkle appcast updater
 specs/v1-mac-app/    Requirements, design, plan (Kiro-style — completed)
@@ -51,7 +57,7 @@ xcodebuild -project mac/PasswordFiller.xcodeproj -scheme PasswordFiller -configu
 
 ## Tests
 
-118 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
+166 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
 
 - `ItemStoreTests` — URL-matching (8 fixtures), TTL eviction, vault merge, credential extraction, hostname extraction, sharedSuffixLength
 - `MergeLogicTests` (inline in ItemStoreTests) — multi-vault collapse
@@ -65,6 +71,12 @@ xcodebuild -project mac/PasswordFiller.xcodeproj -scheme PasswordFiller -configu
 - `UnixSocketProtocolTests` — UInt32-LE + UTF-8-JSON framing against a temp socket
 - `BackwardsCompatTests` — golden-fixture regression guards for the v0.3.x wire shape
 - `BridgeStalenessTests` — D24 stale-bridge verdict (cdhash match / mismatch / failed identity lookup)
+- `BridgeParentPolicyTests` — D25 bridge-parent verdict (every supported browser, foreign Team ID, other app of a browser team, platform binary, signature failure)
+- `SocketDispatchMatrixTests` — D4 socket authorization per `SocketPeer` (`password-filler-mcp` limited to its allow-list)
+- `SocketMCPActionsTests` — `hosts` / `run_credentials` behind the `mcp_enabled` switch (refused when off, cache-only, bridge forbidden)
+- `MCPRequestHandlerTests` — MCP JSON-RPC: handshake versions, notifications, `tools/list`, `list_hosts` results and errors, error codes, no raw newline
+- `RunArgumentsTests` — `password-filler-mcp run --url … -- …` parser
+- `CommandLineToolStatusTests` — `/usr/local/bin/password-filler-mcp` link state (missing, installed, moved app, relative link, foreign file/directory)
 
 Run: `xcodebuild test -project mac/PasswordFiller.xcodeproj -scheme PasswordFillerTests -destination 'platform=macOS,arch=arm64'`.
 
@@ -134,6 +146,7 @@ A run takes 3-6 minutes; notarize latency is the dominant cost.
 | Chrome/Brave extension | `ebcpahcihmnibmplnblcikgjiicmpcff` |
 | Firefox extension | `passwordfiller@app` |
 | Native messaging host | `app.passwordfiller` |
+| MCP server / `run` binary (signing identifier) | `password-filler-mcp` |
 | Main-App bundle ID | `app.passwordfiller` |
 | Agent helper-app bundle ID | `app.passwordfiller.agent` |
 | CredProvider.appex | `app.passwordfiller.CredProvider` |
@@ -154,11 +167,14 @@ Agent reads `~/Library/Application Support/passwordfiller/config.json`:
   "op_tag": ".htaccess",
   "cache_ttl_days": 7,
   "auto_start": true,
-  "auto_refresh_on_start": true
+  "auto_refresh_on_start": true,
+  "mcp_enabled": false
 }
 ```
 
 Legacy 0.3.x configs (only the first two keys) auto-migrate with defaults via per-key `decodeIfPresent` fallbacks in `Config.init(from:)`.
+
+`mcp_enabled` is the "For AI Agents" switch (default off). While it is on, the Agent answers `password-filler-mcp` on the socket actions `hosts` (cache only, never a refresh) and `run_credentials`; while off both return `{"error":"mcp_disabled"}`. `password-filler-mcp run --url <url> -- <command>` exports the credentials as `HTACCESS_USER` / `HTACCESS_PASSWORD` to the command (dotenvx-level protection: the command could print them). Exit codes: 64 usage, 65 no unique item, 69 Agent not running, 77 switch off. See [specs/ai-agent-access/design.md](specs/ai-agent-access/design.md).
 
 Optional debug/test key `cache_ttl_minutes` (not exposed in the Settings UI): when present it overrides `cache_ttl_days` (`Config.effectiveCacheTtlSeconds`) — set e.g. `30` to observe TTL eviction and the expired-cache escalation within minutes instead of days. Remove the key to return to the day-based TTL. Sub-day TTLs surface via `AgentStatus.ttlSeconds`; the popover then shows "Cache-TTL: N Minuten".
 
@@ -199,6 +215,7 @@ Section match wins if present, even if top-level fields also exist.
 - Active revoke polling via `op whoami` every 30 min (+ on `NSWorkspace.didWakeNotification` debounced 5 s) invalidates both the in-memory cache and the on-disk snapshot when 1Password access is revoked. The offboarding guarantee (revoke 1P ⇒ no access anywhere) is preserved despite the on-disk cache.
 - Extension holds no cache — every `onAuthRequired` round-trips through the `pf-nmh-bridge` to the Agent.
 - **Stale-bridge self-healing (D24):** browsers keep `pf-nmh-bridge` alive for as long as they run, so any bundle swap (Sparkle update, DMG drag-drop, dev build) leaves old bridge processes serving. Once the old bundle is gone, the Agent's `PeerAuthorizer` cannot resolve their code identity (`SecCodeCopyGuestWithAttributes` → `100002` = ENOENT) and rejects them — red `!` badge, every lookup falls back to the browser dialog until the browser restarts. Fix is two-sided: the bridge exits on a broken established connection (browser fires `onDisconnect`, the extension respawns within ≤30 s via its status alarm), and the Main-App terminates every bridge whose cdhash differs from the bundled one on each launch (`StaleBridgeReaper`, verdict in `mac/Shared/BridgeStaleness.swift`). Bridges from builds without the fix (≤ v1.4.1) need one manual `pkill -f pf-nmh-bridge` or a browser restart.
+- **Bridge parent check (D25):** the bridge itself passes the Team-ID gate no matter who starts it, so the Agent's `PeerAuthorizer` also checks the bridge's parent process (`proc_pidinfo` → `pbi_ppid`, signature against `anchor apple generic`, then signing identifier + Team ID). Only the exact identities in `mac/Shared/SupportedBrowsers.swift` pass (verdict in `mac/Shared/BridgeParentPolicy.swift`); a hand-started bridge or one re-parented to launchd gets `agent_unreachable`. **Limit:** this is a hurdle against accidental misuse (a script or coding agent that starts the bridge by hand and sends `lookup`), not a boundary against a deliberately malicious process of the same user. Such a process can fork the bridge and then `exec` the real Chrome binary under the same PID, or drive a real browser with a throwaway profile and its own NMH manifest; public macOS API cannot tell either case from a genuine browser spawn. `BrowserCatalog` reads its bundle IDs from the same list. Adding a browser means adding its identity there and checking live that its main process (not a helper) spawns the bridge — `mac/TESTING.md` scenario 12. Socket peers are classified per signing identifier (`SocketPeer`): `pf-nmh-bridge` → bridge actions, `password-filler-mcp` → only the actions in `SocketPeer.mcpClientActions` (allow-list, everything else `{"error":"forbidden"}`), any other identifier → connection closed.
 - Native messaging timeout: 30 s per message.
 - `op item get` fan-out is bounded to 5 in flight (1Password's desktop-app-auth daemon serializes auth checks per parent process; 30+ simultaneous calls pile up in its queue and the later ones time out).
 

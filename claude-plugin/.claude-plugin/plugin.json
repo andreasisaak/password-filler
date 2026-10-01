@@ -1,0 +1,13 @@
+{
+  "name": "password-filler",
+  "displayName": "Password Filler",
+  "version": "1.0.0",
+  "description": "Lets Claude reach HTTP Basic Auth (htaccess) sites through Password Filler and 1Password — in Chrome, Playwright and scripts — without the credentials appearing in the conversation.",
+  "author": {
+    "name": "Andreas Isaak"
+  },
+  "homepage": "https://andreasisaak.github.io/password-filler/",
+  "repository": "https://github.com/andreasisaak/password-filler",
+  "license": "GPL-3.0-or-later",
+  "keywords": ["htaccess", "basic-auth", "1password", "playwright"]
+}

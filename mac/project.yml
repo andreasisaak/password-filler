@@ -49,6 +49,7 @@ targets:
       - target: SafariExt
         embed: true
       - target: pf-nmh-bridge
+      - target: password-filler-mcp
       - package: Sparkle
     settings:
       base:
@@ -60,13 +61,15 @@ targets:
         Release:
           PROVISIONING_PROFILE_SPECIFIER: "PasswordFiller Developer ID"
     postBuildScripts:
-      - name: "Embed Agent helper-app + pf-nmh-bridge"
+      - name: "Embed Agent helper-app + pf-nmh-bridge + password-filler-mcp"
         inputFiles:
           - $(BUILT_PRODUCTS_DIR)/PasswordFillerAgent.app
           - $(BUILT_PRODUCTS_DIR)/pf-nmh-bridge
+          - $(BUILT_PRODUCTS_DIR)/password-filler-mcp
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/Resources/PasswordFillerAgent.app
           - $(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/MacOS/pf-nmh-bridge
+          - $(TARGET_BUILD_DIR)/$(PRODUCT_NAME).app/Contents/MacOS/password-filler-mcp
         script: |
           set -e
           APP="${TARGET_BUILD_DIR}/${PRODUCT_NAME}.app"
@@ -87,6 +90,7 @@ targets:
           ditto "${BUILT_PRODUCTS_DIR}/PasswordFillerAgent.app" \
                 "${APP}/Contents/Resources/PasswordFillerAgent.app"
           cp -f "${BUILT_PRODUCTS_DIR}/pf-nmh-bridge" "${APP}/Contents/MacOS/pf-nmh-bridge"
+          cp -f "${BUILT_PRODUCTS_DIR}/password-filler-mcp" "${APP}/Contents/MacOS/password-filler-mcp"
 
   PasswordFillerAgent:
     # Helper-app bundle, not a CLI tool. Required so the binary can carry
@@ -170,6 +174,20 @@ targets:
         PRODUCT_NAME: pf-nmh-bridge
         SKIP_INSTALL: YES
 
+  # MCP server + `run` wrapper for AI agents (specs/ai-agent-access). The
+  # signing identifier must stay `password-filler-mcp` — the Agent's
+  # PeerAuthorizer admits it as SocketPeer.mcpClient by that identifier.
+  password-filler-mcp:
+    type: tool
+    platform: macOS
+    sources:
+      - path: MCPServer
+      - path: Shared/SocketFraming.swift
+    settings:
+      base:
+        PRODUCT_NAME: password-filler-mcp
+        SKIP_INSTALL: YES
+
   PasswordFillerTests:
     type: bundle.unit-test
     platform: macOS
@@ -182,6 +200,12 @@ targets:
       # without a Mach-Service. `main.swift` is excluded — it's the LaunchAgent
       # CLI entry point and would clash with XCTest's own main.
       - path: Agent
+        type: group
+        excludes:
+          - main.swift
+      # MCPRequestHandler, RunArguments & co.; `main.swift` is the tool's
+      # entry point and would clash with XCTest's own main.
+      - path: MCPServer
         type: group
         excludes:
           - main.swift

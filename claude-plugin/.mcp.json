@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "password-filler": {
+      "command": "password-filler-mcp",
+      "args": []
+    }
+  }
+}
