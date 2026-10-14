@@ -7,6 +7,13 @@ const pendingCallbacks = [];
 // Track pending auth requests to prevent infinite loops.
 const pendingRequests = new Map(); // requestId → timestamp
 
+// HTTPS only: over plain HTTP the credentials would cross the network in
+// cleartext, readable by anyone on the same network who can also forge the
+// 401 challenge. The browser shows its own dialog for HTTP challenges. The
+// cleanup listeners share the filter because only these requests ever land
+// in `pendingRequests`.
+const HTTPS_REQUESTS = { urls: ["https://*/*"] };
+
 // Track main-frame Basic-Auth fills so we can show the first-visit banner
 // once the page finishes loading. tabId → { origin, hostname, ts }.
 const recentFills = new Map();
@@ -83,13 +90,14 @@ chrome.webRequest.onAuthRequired.addListener(
 
     pendingRequests.set(details.requestId, Date.now());
 
-    const hostname = new URL(details.url).hostname;
+    const requestUrl = new URL(details.url);
+    const hostname = requestUrl.hostname;
     sendNativeMessage({ action: "lookup", hostname })
       .then((response) => {
         if (response?.found) {
           if (details.type === "main_frame" && details.tabId >= 0) {
             recentFills.set(details.tabId, {
-              origin: new URL(details.url).origin,
+              origin: requestUrl.origin,
               hostname,
               ts: Date.now()
             });
@@ -109,18 +117,18 @@ chrome.webRequest.onAuthRequired.addListener(
         callback();
       });
   },
-  { urls: ["<all_urls>"] },
+  HTTPS_REQUESTS,
   ["asyncBlocking"]
 );
 
 chrome.webRequest.onCompleted.addListener(
   (details) => pendingRequests.delete(details.requestId),
-  { urls: ["<all_urls>"] }
+  HTTPS_REQUESTS
 );
 
 chrome.webRequest.onErrorOccurred.addListener(
   (details) => pendingRequests.delete(details.requestId),
-  { urls: ["<all_urls>"] }
+  HTTPS_REQUESTS
 );
 
 // Periodic cleanup of stale pending requests (tab closed, network timeout).

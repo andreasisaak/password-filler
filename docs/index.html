@@ -215,10 +215,10 @@
       </div>
       <div class="card-grad border border-neutral-200 rounded-2xl p-6">
         <h3 class="font-semibold flex items-center gap-2">
-          <span class="text-indigo-600">●</span> Built for offboarding
+          <span class="text-indigo-600">●</span> Cache with an expiry date
         </h3>
         <p class="mt-3 text-sm text-neutral-600 leading-relaxed">
-          When 1Password access is revoked — removed from team, signed out, vault unshared — Password Filler wipes its cache within 30 minutes. A background poller (<code class="text-neutral-900 bg-neutral-100 px-1 rounded">op whoami</code>, also on Mac wake) catches the change so cached credentials never outlive the access that fetched them.
+          Cached credentials expire after the TTL you choose. Revoking 1Password access does not wipe them early, so pick a short TTL if offboarding speed matters to your team.
         </p>
       </div>
       <div class="card-grad border border-neutral-200 rounded-2xl p-6">

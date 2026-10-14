@@ -11,13 +11,14 @@ import Foundation
 // challenge, and it is the only way we can tell which host the user is
 // trying to authenticate against without Safari telling us.
 //
-// The entry is a single JSON blob `{host, ts}` (serialised UTF-8 bytes), and
-// stale entries beyond `maxFreshnessSeconds` are ignored so that a stale
-// write from a previous tab never leaks into a new dialog.
+// The entry is a single JSON blob `{host, scheme, ts}` (serialised UTF-8
+// bytes). Stale entries beyond `maxFreshnessSeconds` are ignored so that a
+// stale write from a previous tab never leaks into a new dialog, and a host
+// last observed over plain HTTP is never filled (`Payload.blocksFill`).
 //
 // This type is source-shared between CredProvider (reader) and SafariExt
-// (writer, arriving in Phase-5 partial-2). Both compile against the same
-// `Shared/` group via project.yml, so the wire format stays in lock-step.
+// (writer). Both compile against the same `Shared/` group via project.yml,
+// so the wire format stays in lock-step.
 
 public enum SharedHostKeychain {
 
@@ -43,13 +44,17 @@ public enum SharedHostKeychain {
 
     /// Wire payload written to the keychain entry. Both appexes encode/decode
     /// via the same struct so a schema change breaks the build, not the
-    /// runtime.
+    /// runtime. `scheme` is required: an entry without it (written by an
+    /// older SafariExt) fails to decode and counts as a keychain miss.
     public struct Payload: Codable, Equatable, Sendable {
         public let host: String
+        /// URL scheme of the observed request, lowercased (`https`, `http`).
+        public let scheme: String
         public let ts: TimeInterval
 
-        public init(host: String, ts: TimeInterval = Date().timeIntervalSince1970) {
+        public init(host: String, scheme: String, ts: TimeInterval = Date().timeIntervalSince1970) {
             self.host = host
+            self.scheme = scheme
             self.ts = ts
         }
 
@@ -59,6 +64,13 @@ public enum SharedHostKeychain {
 
         public var isFresh: Bool {
             age <= SharedHostKeychain.maxFreshnessSeconds
+        }
+
+        /// True when this observation shows that `host` was last requested
+        /// over something other than HTTPS. Credentials must not go there:
+        /// over plain HTTP they would cross the network in cleartext.
+        public func blocksFill(forHost host: String) -> Bool {
+            self.host == host && scheme != "https"
         }
     }
 }

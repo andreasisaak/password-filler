@@ -144,6 +144,12 @@ jobs:
             exit 1
           fi
 
+      # A hosting platform missing from a stale list lets its tenants fill
+      # each other's credentials (CLAUDE.md § URL matching).
+      - name: Pre-flight — Public Suffix List is current
+        if: steps.mac-changes.outputs.changed == 'true'
+        run: node scripts/update-psl.js --check-age 30
+
       - name: Update extension manifest version
         env:
           VERSION: ${{ steps.version.outputs.version }}

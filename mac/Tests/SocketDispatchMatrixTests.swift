@@ -11,15 +11,12 @@ final class SocketDispatchMatrixTests: XCTestCase {
     override func setUp() {
         store = ItemStore(ttl: 7 * 86_400)
         store.replace(with: [
-            StoredItem(
-                itemId: "1", title: "T", hostnames: ["app.example.com"], domains: ["example.com"],
-                username: "admin", password: "secret", sourceVault: nil, cachedAt: Date()
-            )
+            StoredItem.example(hostnames: ["app.example.com"], username: "admin", password: "secret")
         ])
         let config = Config(opAccount: "team.1password.com", opTag: ".htaccess", cacheTtlDays: 7)
         let service = AgentService(
             store: store,
-            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"), account: nil, timeout: 5),
+            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"), timeout: 5),
             configProvider: { config },
             configReloader: { config }
         )

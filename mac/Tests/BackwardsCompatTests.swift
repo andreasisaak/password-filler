@@ -37,7 +37,7 @@ final class BackwardsCompatTests: XCTestCase {
 
         store = ItemStore(ttl: 7 * 86_400)
         let bogusOp = URL(fileURLWithPath: "/dev/null/nonexistent-op")
-        let opClient = OpClient(bundledOpURL: bogusOp, account: nil, timeout: 5)
+        let opClient = OpClient(bundledOpURL: bogusOp, timeout: 5)
         service = AgentService(
             store: store,
             opClient: opClient,
@@ -84,7 +84,7 @@ final class BackwardsCompatTests: XCTestCase {
 
     func testLegacyLookupHitReturnsExactLegacyKeySet() throws {
         store.replace(with: [
-            makeItem(id: "1", hostnames: ["app.example.com"],
+            StoredItem.example(id: "1", hostnames: ["app.example.com"],
                      username: "legacy_user", password: "legacy_pass")
         ])
 
@@ -112,8 +112,8 @@ final class BackwardsCompatTests: XCTestCase {
 
     func testLegacyPingReturnsPongWithCachedCount() throws {
         store.replace(with: [
-            makeItem(id: "a", hostnames: ["a.example.com"]),
-            makeItem(id: "b", hostnames: ["b.example.com"])
+            StoredItem.example(id: "a", hostnames: ["a.example.com"]),
+            StoredItem.example(id: "b", hostnames: ["b.example.com"])
         ])
 
         let reply = try send(legacyPingJSON)
@@ -260,18 +260,5 @@ final class BackwardsCompatTests: XCTestCase {
             remaining -= got
             offset += got
         }
-    }
-
-    private func makeItem(
-        id: String,
-        hostnames: [String],
-        username: String = "user",
-        password: String = "pass"
-    ) -> StoredItem {
-        let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-        return StoredItem(
-            itemId: id, title: "T", hostnames: hostnames, domains: domains,
-            username: username, password: password, sourceVault: nil, cachedAt: Date()
-        )
     }
 }

@@ -33,7 +33,7 @@ final class UnixSocketProtocolTests: XCTestCase {
 
         store = ItemStore(ttl: 7 * 86_400)
         let bogusOp = URL(fileURLWithPath: "/dev/null/nonexistent-op")
-        let opClient = OpClient(bundledOpURL: bogusOp, account: nil, timeout: 5)
+        let opClient = OpClient(bundledOpURL: bogusOp, timeout: 5)
 
         service = AgentService(
             store: store,
@@ -60,7 +60,7 @@ final class UnixSocketProtocolTests: XCTestCase {
     // MARK: - ping
 
     func testPingReturnsPongWithCacheCount() throws {
-        store.replace(with: [makeItem(id: "1", hostnames: ["example.com"])])
+        store.replace(with: [StoredItem.example(id: "1", hostnames: ["example.com"])])
 
         let reply = try sendAndReceive(["action": "ping"])
         XCTAssertEqual(reply["pong"] as? Bool, true)
@@ -79,7 +79,7 @@ final class UnixSocketProtocolTests: XCTestCase {
 
     func testLookupHitReturnsFoundTrueWithCredentials() throws {
         store.replace(with: [
-            makeItem(id: "1", hostnames: ["app.example.com"],
+            StoredItem.example(id: "1", hostnames: ["app.example.com"],
                      username: "admin", password: "secret")
         ])
 
@@ -90,7 +90,7 @@ final class UnixSocketProtocolTests: XCTestCase {
     }
 
     func testLookupMissReturnsFoundFalse() throws {
-        store.replace(with: [makeItem(id: "1", hostnames: ["only.example.com"])])
+        store.replace(with: [StoredItem.example(id: "1", hostnames: ["only.example.com"])])
 
         let reply = try sendAndReceive(["action": "lookup", "hostname": "nowhere.org"])
         // Miss must emit `{found:false}` so the extension's `callback()`
@@ -243,18 +243,5 @@ final class UnixSocketProtocolTests: XCTestCase {
             remaining -= got
             offset += got
         }
-    }
-
-    private func makeItem(
-        id: String,
-        hostnames: [String],
-        username: String = "user",
-        password: String = "pass"
-    ) -> StoredItem {
-        let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-        return StoredItem(
-            itemId: id, title: "T", hostnames: hostnames, domains: domains,
-            username: username, password: password, sourceVault: nil, cachedAt: Date()
-        )
     }
 }

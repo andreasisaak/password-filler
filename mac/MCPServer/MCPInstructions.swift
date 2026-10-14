@@ -10,7 +10,7 @@ enum MCPInstructions {
         Password Filler holds the user's HTTP Basic Auth (htaccess) credentials from 1Password. \
         You never need, ask for, or see them. \
         Claude in Chrome: just open the protected URL — the Password Filler extension answers the login \
-        before any dialog appears; never ask the user to log in. \
+        of `https://` pages before any dialog appears (never over plain `http://`); never ask the user to log in. \
         Playwright MCP: works only when started with `--extension`; its own fresh browser gets 401. \
         curl, scripts, Playwright tests: `password-filler-mcp run --url <url> -- sh -c '<command using \
         "$HTACCESS_USER" and "$HTACCESS_PASSWORD">'` — always single quotes around the sh -c script, \

@@ -38,7 +38,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
         store = ItemStore(ttl: 7 * 86_400)
         auditStore = AuditStore(url: auditURL)
         let bogusOp = URL(fileURLWithPath: "/dev/null/nonexistent-op")
-        let opClient = OpClient(bundledOpURL: bogusOp, account: nil, timeout: 5)
+        let opClient = OpClient(bundledOpURL: bogusOp, timeout: 5)
 
         service = AgentService(
             store: store,
@@ -107,7 +107,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
     // MARK: - getStatus
 
     func testGetStatusReturnsAgentStatus() throws {
-        store.replace(with: [makeItem(id: "1", hostnames: ["example.com"])])
+        store.replace(with: [StoredItem.example(id: "1", hostnames: ["example.com"])])
         service.setConnectionState(.connected)
 
         let proxy = try self.proxy()
@@ -136,7 +136,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
 
     func testLookupCredentialsHit() throws {
         store.replace(with: [
-            makeItem(id: "1", hostnames: ["app.example.com"], username: "admin", password: "secret")
+            StoredItem.example(id: "1", hostnames: ["app.example.com"], username: "admin", password: "secret")
         ])
 
         let proxy = try self.proxy()
@@ -150,7 +150,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
     }
 
     func testLookupCredentialsMissReturnsNil() throws {
-        store.replace(with: [makeItem(id: "1", hostnames: ["one.example.com"])])
+        store.replace(with: [StoredItem.example(id: "1", hostnames: ["one.example.com"])])
 
         let proxy = try self.proxy()
         let data: Data? = try awaitReply { reply in
@@ -163,8 +163,8 @@ final class AgentXPCIntegrationTests: XCTestCase {
 
     func testListItemsReturnsDisplayRows() throws {
         store.replace(with: [
-            makeItem(id: "1", title: "Beta", hostnames: ["b.example.com"]),
-            makeItem(id: "2", title: "Alpha", hostnames: ["a.example.com"])
+            StoredItem.example(id: "1", title: "Beta", hostnames: ["b.example.com"]),
+            StoredItem.example(id: "2", title: "Alpha", hostnames: ["a.example.com"])
         ])
 
         let proxy = try self.proxy()
@@ -176,8 +176,6 @@ final class AgentXPCIntegrationTests: XCTestCase {
     }
 
     func testListItemsEmptyStoreReturnsEmptyArray() throws {
-        store.evictAll()
-
         let proxy = try self.proxy()
         let data: Data? = try awaitReply { reply in proxy.listItems(reply: reply) }
         let rows = try XCTUnwrap(XPCPayload.decode([DisplayRow].self, from: data))
@@ -277,8 +275,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
         let configStore = ConfigStore(url: tempURL)
         let isolatedService = AgentService(
             store: store,
-            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"),
-                               account: nil, timeout: 5),
+            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"), timeout: 5),
             configProvider: { (try? configStore.load()) ?? Config() },
             configReloader: { try configStore.load() },
             identityUpdater: nil,
@@ -287,7 +284,7 @@ final class AgentXPCIntegrationTests: XCTestCase {
 
         // Pre-load the ItemStore so we can prove lookups still work after the
         // hook misfires.
-        let item = makeItem(id: "1", hostnames: ["app.example.com"], username: "u", password: "p")
+        let item = StoredItem.example(id: "1", hostnames: ["app.example.com"], username: "u", password: "p")
         store.replace(with: [item])
 
         // Sentinel input that would normally produce a `noWebsite` finding —
@@ -308,21 +305,5 @@ final class AgentXPCIntegrationTests: XCTestCase {
         // AuditStore.current did not get populated — the save failed so the
         // in-memory state stays consistent with the on-disk state (still empty).
         XCTAssertTrue(badAuditStore.current.isEmpty)
-    }
-
-    // MARK: - Helpers
-
-    private func makeItem(
-        id: String,
-        title: String = "T",
-        hostnames: [String],
-        username: String = "user",
-        password: String = "pass"
-    ) -> StoredItem {
-        let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-        return StoredItem(
-            itemId: id, title: title, hostnames: hostnames, domains: domains,
-            username: username, password: password, sourceVault: nil, cachedAt: Date()
-        )
     }
 }

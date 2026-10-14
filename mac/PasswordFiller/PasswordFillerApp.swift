@@ -109,7 +109,6 @@ private struct MenuBarIconView: View {
         switch state {
         case .connected:     return "lock.fill"
         case .locked:        return "lock.slash.fill"
-        case .revoked:       return "lock.trianglebadge.exclamationmark"
         case .notConfigured: return "lock.open"
         case .error:         return "lock.trianglebadge.exclamationmark"
         }
@@ -136,8 +135,6 @@ private struct MenuBarIconView: View {
             return String(localized: "Password Filler — connected, \(count) items")
         case .locked:
             return String(localized: "Password Filler — \(String(localized: "1Password locked"))")
-        case .revoked:
-            return String(localized: "Password Filler — \(String(localized: "1Password access revoked"))")
         case .notConfigured:
             return String(localized: "Password Filler — \(String(localized: "Not configured"))")
         case .error:

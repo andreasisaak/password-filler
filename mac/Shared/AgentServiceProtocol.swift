@@ -71,7 +71,6 @@ public enum ConnectionState: String, Codable, Sendable {
     case notConfigured
     case connected
     case locked
-    case revoked
     case error
 }
 
@@ -134,7 +133,7 @@ public struct AgentStatus: Codable, Equatable, Sendable {
     /// Human-readable explanation of the last non-transient failure. Set by
     /// the refresh pipeline when it hits an error, cleared on the next
     /// successful refresh. Surfaces to the popover as the secondary line for
-    /// `.error` / `.locked` / `.revoked` states so the user sees *why* the
+    /// `.error` / `.locked` states so the user sees *why* the
     /// status is bad, not just that it is.
     public let errorMessage: String?
 

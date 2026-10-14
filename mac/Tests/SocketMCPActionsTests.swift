@@ -12,12 +12,12 @@ final class SocketMCPActionsTests: XCTestCase {
     override func setUp() {
         store = ItemStore(ttl: 7 * 86_400)
         store.replace(with: [
-            makeItem(id: "1", hostnames: ["b.example.org", "a.example.com"], username: "admin", password: "secret"),
-            makeItem(id: "2", hostnames: ["c.example.com", "a.example.com"], username: "other", password: "other-secret"),
+            StoredItem.example(id: "1", hostnames: ["b.example.org", "a.example.com"], username: "admin", password: "secret"),
+            StoredItem.example(id: "2", hostnames: ["c.example.com", "a.example.com"], username: "other", password: "other-secret"),
         ])
         let service = AgentService(
             store: store,
-            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"), account: nil, timeout: 5),
+            opClient: OpClient(bundledOpURL: URL(fileURLWithPath: "/dev/null/nonexistent-op"), timeout: 5),
             configProvider: { [unowned self] in self.config },
             configReloader: { [unowned self] in self.config }
         )
@@ -88,13 +88,5 @@ final class SocketMCPActionsTests: XCTestCase {
         let body = try JSONSerialization.data(withJSONObject: request)
         let response = server.dispatch(request: body, peer: peer, processID: 4242)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: response) as? [String: Any])
-    }
-
-    private func makeItem(id: String, hostnames: [String], username: String, password: String) -> StoredItem {
-        let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-        return StoredItem(
-            itemId: id, title: "T", hostnames: hostnames, domains: domains,
-            username: username, password: password, sourceVault: nil, cachedAt: Date()
-        )
     }
 }

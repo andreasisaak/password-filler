@@ -89,40 +89,6 @@ public struct Credentials: Equatable, Sendable {
     }
 }
 
-/// An item as it lives in the Agent cache. `sourceVaults` is populated when merging identical
-/// items from multiple vaults (see `ItemStore.mergedForDisplay`).
-public struct StoredItem: Codable, Equatable, Sendable {
-    public let itemId: String
-    public let title: String
-    public let hostnames: [String]
-    /// eTLD+1 domains derived from `hostnames`, deduplicated.
-    public let domains: [String]
-    public let username: String
-    public let password: String
-    public let sourceVault: String?
-    public let cachedAt: Date
-
-    public init(
-        itemId: String,
-        title: String,
-        hostnames: [String],
-        domains: [String],
-        username: String,
-        password: String,
-        sourceVault: String?,
-        cachedAt: Date
-    ) {
-        self.itemId = itemId
-        self.title = title
-        self.hostnames = hostnames
-        self.domains = domains
-        self.username = username
-        self.password = password
-        self.sourceVault = sourceVault
-        self.cachedAt = cachedAt
-    }
-}
-
 /// Merged-for-display row. Multiple `StoredItem`s collapse into one row when their
 /// (title, hostnames-set, username, password) are identical — only `sourceVaults` differs.
 ///

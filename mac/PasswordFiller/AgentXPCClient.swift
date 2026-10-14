@@ -11,8 +11,8 @@ import os.log
 /// - Bridge the callback-style `AgentServiceProtocol` calls to Swift async so
 ///   SwiftUI views can `await` them in a Task.
 /// - Poll `getStatus` + `listItems` on a timer so the popover stays live even
-///   without user interaction (cache-TTL eviction, RevokePoller clearing the
-///   cache, refresh completing in the background — all visible here).
+///   without user interaction (cache-TTL eviction, refresh completing in the
+///   background — all visible here).
 ///
 /// Thread-safety: all `@Observable` property mutations are funnelled through
 /// `@MainActor`. XPC reply callbacks land on arbitrary threads and hop back.

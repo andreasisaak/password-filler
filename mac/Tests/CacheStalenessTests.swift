@@ -54,7 +54,7 @@ final class CacheStalenessTests: XCTestCase {
     }
 
     func testNonConnectedStatesNeverDeriveExpired() {
-        for state in [ConnectionState.locked, .revoked, .notConfigured, .error] {
+        for state in [ConnectionState.locked, .notConfigured, .error] {
             let subject = status(
                 itemCount: 0,
                 lastRefresh: now.addingTimeInterval(-8 * 86_400),

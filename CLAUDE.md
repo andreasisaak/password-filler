@@ -21,7 +21,7 @@ mac/                 Native macOS app (Swift, xcodegen-driven Xcode project)
   SafariExt/         Sandboxed Safari Web Extension appex (URL observer)
   NMHBridge/         pf-nmh-bridge: Chrome/Firefox/Brave NMH stdio ↔ socket proxy
   MCPServer/         password-filler-mcp: MCP server (list_hosts) + `run` env wrapper for AI agents
-  Tests/             XCTest unit + integration suites (166 tests)
+  Tests/             XCTest unit + integration suites (161 tests)
   TESTING.md         Manual smoke-test checklist (13 scenarios)
 extension/           MV3 extension for Chrome/Firefox/Brave (proxy-only)
 claude-plugin/       Claude Code plugin (skill password-filler + .mcp.json → password-filler-mcp)
@@ -30,7 +30,7 @@ claude-plugin/       Claude Code plugin (skill password-filler + .mcp.json → p
                      claude-plugin/.claude-plugin/plugin.json `version` on every
                      plugin change, or installed copies never update.
 installer/           Shared entitlements + ExportOptions for xcodebuild
-scripts/             CWS ZIP builder + Sparkle appcast updater
+scripts/             CWS ZIP builder, Sparkle appcast updater, PSL generator (update-psl.js)
 specs/v1-mac-app/    Requirements, design, plan (Kiro-style — completed)
 updates/             mac-appcast.xml — Sparkle update feed for the Mac app.
                      Browser update manifests (chrome.xml, firefox.json) are
@@ -57,16 +57,17 @@ xcodebuild -project mac/PasswordFiller.xcodeproj -scheme PasswordFiller -configu
 
 ## Tests
 
-166 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
+161 XCTests in `mac/Tests/` (0 failures, 1 pre-existing skip when the `op` binary is system-installed):
 
-- `ItemStoreTests` — URL-matching (8 fixtures), TTL eviction, vault merge, credential extraction, hostname extraction, sharedSuffixLength
+- `ItemStoreTests` — URL-matching (9 fixtures, incl. foreign tenant on a shared platform), TTL eviction, vault merge, credential extraction, hostname extraction, sharedSuffixLength
 - `MergeLogicTests` (inline in ItemStoreTests) — multi-vault collapse
 - `CacheTtlTests` (inline in ItemStoreTests) — eviction past TTL, live TTL mutation
-- `OpClientTests` — `parseWhoami` pure-function tests covering authenticated / locked / noAccounts / unknown
+- `OpClientTests` — `op` binary path resolution, `op_account` reconciliation (`resolveAccount`)
 - `CacheStalenessTests` — `AgentStatus.isCacheExpired` derivation (expired-cache escalation)
 - `ConfigStoreTests` — legacy migration, snake-case round-trip, atomic writes
-- `RevokePollerTests` — state machine + ItemStore eviction wiring
-- `PublicSuffixListTests` — eTLD+1 resolution
+- `PublicSuffixListTests` — eTLD+1 against the full PSL: private platform suffixes, wildcard + exception rules, Punycode IDN suffixes, fail-closed for uncovered hosts
+- `StoredItemTests` — `domains` derived, deduplicated, sorted; a stale `domains` key in an old snapshot is ignored
+- `SharedHostKeychainTests` — Safari handoff payload: scheme required (legacy entries rejected), round trip, `blocksFill` only for a non-https observation of the same host
 - `AgentXPCIntegrationTests` — every `AgentServiceProtocol` method over an anonymous `NSXPCListener`
 - `UnixSocketProtocolTests` — UInt32-LE + UTF-8-JSON framing against a temp socket
 - `BackwardsCompatTests` — golden-fixture regression guards for the v0.3.x wire shape
@@ -111,6 +112,7 @@ The shipped `pf-install.sh` script does this automatically for `mac/build/Debug/
 ## Xcode gotchas
 
 - **Always build the app scheme** (`PasswordFiller`), not individual target schemes — target schemes trigger 2-3 min provisioning-profile lookups.
+- **Agent-only sources live in `mac/Agent/`**, not `mac/Shared/`: `ItemStore`, `StoredItem`, `PersistentCache`, `AuditChecker`, `AuditStore`, `BridgeParentPolicy`, `PublicSuffixList*`. Only the Agent and the test target compile `mac/Agent/`, which keeps the ~150 KB Public Suffix List data out of the main app and both appexes. `mac/Shared/` is for code at least one other target needs.
 - **Entitlements files are not tracked as dependencies of post-build scripts.** Changing entitlements without a Clean Build may leave old-signed binaries in the build output.
 - **Do not re-sign nested binaries in post-build phases** unless the script also re-applies the provisioning profile — Xcode signs tool targets with their own profile during target build; re-signing with `codesign` strips that authorization and launchd SIGKILLs the binary (OS_REASON_EXEC 0x8).
 - **Entitlements XML cannot reference `$(AppIdentifierPrefix)`** in files passed directly to `codesign` — only Xcode's entitlements processor expands that variable. Hardcode the Team ID (`A5278RL7RX`) in files the build scripts hand to `codesign`.
@@ -136,6 +138,8 @@ archive → exportArchive (per-target provisioning profile) → hdiutil DMG
 ```
 
 A run takes 3-6 minutes; notarize latency is the dominant cost.
+
+Before tagging, refresh the Public Suffix List with `node scripts/update-psl.js` and commit `mac/Agent/PublicSuffixListRules.swift` if it changed. A platform missing from a stale list lets its tenants match each other (see URL matching), so the release workflow's pre-flight runs `node scripts/update-psl.js --check-age 30` and fails when the list is older than 30 days.
 
 **Sparkle key generation is one-time, on the maintainer's Mac.** See [mac/README.md § Sparkle key generation](mac/README.md#sparkle-key-generation-one-time). The CI fails its pre-flight check without `SPARKLE_PRIVATE_KEY` (repo secret) and `SUPublicEDKey` (in `mac/PasswordFiller/Info.plist`).
 
@@ -196,6 +200,12 @@ Three-stage lookup in the Agent's `ItemStore`:
 2. Domain-suffix match (Public Suffix List) — unique candidate wins
 3. Tiebreak: shared suffix length → subdomain depth
 
+Stage 2 uses the full official Public Suffix List (ICANN + PRIVATE sections), generated into `mac/Agent/PublicSuffixListRules.swift` by `node scripts/update-psl.js`. The PRIVATE section is a security boundary, not a nicety: it makes shared platforms (`cloudfront.net`, `herokuapp.com`, `github.io`, `vercel.app`, …) public suffixes, so a stranger's `evil.herokuapp.com` never shares an eTLD+1 with a stored `kunde.herokuapp.com` and cannot pull its credentials with a forged 401. Hosts no rule covers (`localhost`, `*.local`, unknown TLDs) have no eTLD+1 — fail-closed, exact match only. Never replace the list with a hand-curated subset (up to v1.5.0 it did, and every platform tenant was fillable by any other).
+
+`StoredItem.domains` is a computed property over `hostnames`, so it is never persisted and an older snapshot's `domains` key is ignored on decode; `ItemStore.lookup` filters stage-2 candidates by it.
+
+Credentials go only to HTTPS requests. The Chrome/Firefox/Brave extension registers its `webRequest` listeners for `https://*/*` only (`HTTPS_REQUESTS` in `extension/background.js`), so a plain-HTTP 401 gets the browser's own dialog. In Safari, `SafariExtHandler` stores the observed request's scheme next to the host (`SharedHostKeychain.Payload`), and the CredProvider's single gate (`fillIfNotBlocked`) refuses a host whose freshest observation is not `https` (`Payload.blocksFill(forHost:)`). That covers the Basic-Auth dialog path fully; identity-store fills (`.domain` identities, no scheme) are covered only while SafariExt observes the page. `password-filler-mcp run --url` is not covered: the Agent never sees the command's real request.
+
 If both tiebreakers fail (ambiguous), **no credentials returned** — silent failure, check `log show`. Wildcards (`*.example.com` literally stored on a 1P item) are not glob-expanded; they reach real requests via the suffix rule because `eTLD+1` resolves both to the same base domain. See `testWildcardHostnameFallsThroughToSuffixMatch` in `ItemStoreTests`.
 
 ## Credential extraction
@@ -212,10 +222,10 @@ Section match wins if present, even if top-level fields also exist.
 - Agent cache lives in-memory in `ItemStore` and is **persisted encrypted** to disk via `PersistentCache` (AES-256-GCM with a per-Mac key in the macOS Keychain). Cache survives Mac reboot and Agent respawn — no Touch-ID prompt needed before Basic-Auth fills work after login.
 - TTL configurable 1/3/7/14/30 days (default 7); evicted on read past TTL.
 - **Expired-cache escalation:** `AgentService.getStatus` reports the TTL-pruned item count, and the Main-App derives `AgentStatus.isCacheExpired` (`mac/Shared/CacheStaleness.swift`: connected + 0 items + lastRefresh ≥ one TTL window) to escalate — warning menu-bar icon (`lock.trianglebadge.exclamationmark`), „Cache abgelaufen" popover state, and one user notification per transition (`StaleCacheNotifier`, edge-triggered, re-nudges once per app launch). Rationale: the Agent seeds `connectionState = .connected` from the persisted cache at launch and nothing re-evaluates it after eviction — without the derivation the UI shows „Verbunden · 0 Einträge" forever while fills silently fail.
-- Active revoke polling via `op whoami` every 30 min (+ on `NSWorkspace.didWakeNotification` debounced 5 s) invalidates both the in-memory cache and the on-disk snapshot when 1Password access is revoked. The offboarding guarantee (revoke 1P ⇒ no access anywhere) is preserved despite the on-disk cache.
+- **No revoke-triggered eviction.** Policy C (2026-04-23) dropped the `op whoami` revoke poller (`mac/Agent/main.swift`): `whoami` cannot tell "1Password locked" from "CLI trust lost after a new build". A failed refresh keeps the cache too (`AgentService.swift`, stale beats empty for transient failures). So after 1Password access is revoked, cached credentials stay usable until the TTL expires (default 7 days, max 30) — there is no "revoke ⇒ no access" guarantee, and no code path wipes the cache early.
 - Extension holds no cache — every `onAuthRequired` round-trips through the `pf-nmh-bridge` to the Agent.
 - **Stale-bridge self-healing (D24):** browsers keep `pf-nmh-bridge` alive for as long as they run, so any bundle swap (Sparkle update, DMG drag-drop, dev build) leaves old bridge processes serving. Once the old bundle is gone, the Agent's `PeerAuthorizer` cannot resolve their code identity (`SecCodeCopyGuestWithAttributes` → `100002` = ENOENT) and rejects them — red `!` badge, every lookup falls back to the browser dialog until the browser restarts. Fix is two-sided: the bridge exits on a broken established connection (browser fires `onDisconnect`, the extension respawns within ≤30 s via its status alarm), and the Main-App terminates every bridge whose cdhash differs from the bundled one on each launch (`StaleBridgeReaper`, verdict in `mac/Shared/BridgeStaleness.swift`). Bridges from builds without the fix (≤ v1.4.1) need one manual `pkill -f pf-nmh-bridge` or a browser restart.
-- **Bridge parent check (D25):** the bridge itself passes the Team-ID gate no matter who starts it, so the Agent's `PeerAuthorizer` also checks the bridge's parent process (`proc_pidinfo` → `pbi_ppid`, signature against `anchor apple generic`, then signing identifier + Team ID). Only the exact identities in `mac/Shared/SupportedBrowsers.swift` pass (verdict in `mac/Shared/BridgeParentPolicy.swift`); a hand-started bridge or one re-parented to launchd gets `agent_unreachable`. **Limit:** this is a hurdle against accidental misuse (a script or coding agent that starts the bridge by hand and sends `lookup`), not a boundary against a deliberately malicious process of the same user. Such a process can fork the bridge and then `exec` the real Chrome binary under the same PID, or drive a real browser with a throwaway profile and its own NMH manifest; public macOS API cannot tell either case from a genuine browser spawn. `BrowserCatalog` reads its bundle IDs from the same list. Adding a browser means adding its identity there and checking live that its main process (not a helper) spawns the bridge — `mac/TESTING.md` scenario 12. Socket peers are classified per signing identifier (`SocketPeer`): `pf-nmh-bridge` → bridge actions, `password-filler-mcp` → only the actions in `SocketPeer.mcpClientActions` (allow-list, everything else `{"error":"forbidden"}`), any other identifier → connection closed.
+- **Bridge parent check (D25):** the bridge itself passes the Team-ID gate no matter who starts it, so the Agent's `PeerAuthorizer` also checks the bridge's parent process (`proc_pidinfo` → `pbi_ppid`, signature against `anchor apple generic`, then signing identifier + Team ID). Only the exact identities in `mac/Shared/SupportedBrowsers.swift` pass (verdict in `mac/Agent/BridgeParentPolicy.swift`); a hand-started bridge or one re-parented to launchd gets `agent_unreachable`. **Limit:** this is a hurdle against accidental misuse (a script or coding agent that starts the bridge by hand and sends `lookup`), not a boundary against a deliberately malicious process of the same user. Such a process can fork the bridge and then `exec` the real Chrome binary under the same PID, or drive a real browser with a throwaway profile and its own NMH manifest; public macOS API cannot tell either case from a genuine browser spawn. `BrowserCatalog` reads its bundle IDs from the same list. Adding a browser means adding its identity there and checking live that its main process (not a helper) spawns the bridge — `mac/TESTING.md` scenario 12. Socket peers are classified per signing identifier (`SocketPeer`): `pf-nmh-bridge` → bridge actions, `password-filler-mcp` → only the actions in `SocketPeer.mcpClientActions` (allow-list, everything else `{"error":"forbidden"}`), any other identifier → connection closed.
 - Native messaging timeout: 30 s per message.
 - `op item get` fan-out is bounded to 5 in flight (1Password's desktop-app-auth daemon serializes auth checks per parent process; 30+ simultaneous calls pile up in its queue and the later ones time out).
 

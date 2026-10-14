@@ -375,17 +375,6 @@
         }
       }
     },
-    "1Password access revoked" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1Password-Zugriff entzogen"
-          }
-        }
-      }
-    },
     "1Password account" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -909,17 +898,6 @@
         }
       }
     },
-    "Empty parent integration — will follow in a later version" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eigene Integration — folgt in späterer Version"
-          }
-        }
-      }
-    },
     "Enable in System Settings → Passwords → AutoFill" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1026,17 +1004,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Browser-Erweiterungen installieren"
-          }
-        }
-      }
-    },
-    "Install op via brew install 1password-cli or from 1password.com." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Installiere op via brew install 1password-cli oder von 1password.com."
           }
         }
       }
@@ -1305,13 +1272,13 @@
         }
       }
     },
-    "op could not be found in any of the known paths. Install it and try again." : {
+    "op could not be found in any of the known paths." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "op wurde in keinem der bekannten Pfade gefunden. Installiere es und versuche es erneut."
+            "value" : "op wurde in keinem der bekannten Pfade gefunden."
           }
         }
       }
@@ -1543,17 +1510,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Safari-Integration (folgt)"
-          }
-        }
-      }
-    },
-    "Safari integration will ship in a later version." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Safari-Integration wird in einer späteren Version ausgeliefert."
           }
         }
       }

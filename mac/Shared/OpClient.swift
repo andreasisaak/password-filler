@@ -1,14 +1,5 @@
 import Foundation
 
-/// Result of `op whoami`.
-public enum WhoamiResult: Equatable, Sendable {
-    case authenticated(account: String)
-    case locked
-    case noAccounts
-    case timeout
-    case unknown(stderr: String, exitCode: Int32)
-}
-
 public enum OpClientError: Error, Equatable {
     case binaryNotFound
     case decodingFailed(String)
@@ -20,8 +11,7 @@ public enum OpClientError: Error, Equatable {
     case accountUnavailable(String)
 }
 
-/// One entry from `op account list --format=json`. Field names mirror
-/// `op whoami --format=json` (`user_uuid` / `account_uuid`).
+/// One entry from `op account list --format=json` (`user_uuid` / `account_uuid`).
 public struct OpAccount: Decodable, Equatable, Sendable {
     public let url: String
     public let email: String
@@ -49,25 +39,12 @@ public struct OpAccount: Decodable, Equatable, Sendable {
     }
 }
 
-/// Thin abstraction implemented by `OpClient`. Exists so that tests (and, if
-/// ever needed, alternate backends) can substitute their own `whoami()` without
-/// spawning the real 1Password CLI.
-public protocol WhoamiProvider {
-    func whoami() throws -> WhoamiResult
-}
-
 /// Wraps the `op` (1Password CLI) binary. Every call runs as a subprocess with
-/// a 30 s timeout (matching the legacy Node-host).
-///
-/// Every public method that hits 1Password (`itemList`, `itemGet`) calls
-/// `whoami()` first and bails out with a typed error on `.locked`, `.noAccounts`,
-/// etc. — avoiding fragile stderr parsing on the real calls (decision D20).
-public final class OpClient: WhoamiProvider {
+/// a timeout (`timeout`, default 60 s).
+public final class OpClient {
 
     /// Bundle resource URL (`Contents/Resources/op`) if the binary ships inside the .app.
     private let bundledOpURL: URL?
-    /// Account shorthand passed as `--account <value>` on every call.
-    public let account: String?
     /// Timeout for each subprocess.
     public let timeout: TimeInterval
 
@@ -76,11 +53,9 @@ public final class OpClient: WhoamiProvider {
 
     public init(
         bundledOpURL: URL? = Bundle.main.url(forResource: "op", withExtension: nil),
-        account: String? = nil,
         timeout: TimeInterval = 60
     ) {
         self.bundledOpURL = bundledOpURL
-        self.account = account
         self.timeout = timeout
     }
 
@@ -125,16 +100,10 @@ public final class OpClient: WhoamiProvider {
 
     // MARK: - High-level commands
 
-    public func whoami() throws -> WhoamiResult {
-        let args = buildArgs(["whoami"], account: account)
-        let result = try runProcess(args: args)
-        return Self.parseWhoami(stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode)
-    }
-
-    /// Lists every account `op` knows. Runs without an `--account` filter and
-    /// without preflight, so it works even while accounts are locked or signed
-    /// out — which is exactly the state we recover from when `op_account` is
-    /// stale (`resolveAccountArgument`).
+    /// Lists every account `op` knows. Runs without an `--account` filter, so
+    /// it works even while accounts are locked or signed out — which is
+    /// exactly the state we recover from when `op_account` is stale
+    /// (`resolveAccountArgument`).
     public func listAccounts() throws -> [OpAccount] {
         let args = buildArgs(["account", "list"], account: nil)
         let result = try runProcess(args: args)
@@ -144,25 +113,24 @@ public final class OpClient: WhoamiProvider {
         return try decode([OpAccount].self, from: result.stdout)
     }
 
-    /// Reconciles the configured `op_account` hint against the accounts `op`
-    /// actually knows and returns the `--account` value to use for this refresh
-    /// (`nil` is never returned — a concrete account is always resolved or an
-    /// error is thrown). Throws `accountUnavailable` only when the choice is
+    /// Reconciles the configured `op_account` hint (empty = none) against the
+    /// accounts `op` actually knows and returns the `--account` value to use
+    /// for this refresh. Throws `accountUnavailable` only when the choice is
     /// genuinely ambiguous: picking the wrong account could fill credentials
     /// from the wrong vault, so we refuse to guess.
-    public func resolveAccountArgument() throws -> String? {
-        try Self.resolveAccount(configured: account, accounts: try listAccounts())
+    public func resolveAccountArgument(configured: String) throws -> String {
+        try Self.resolveAccount(configured: configured, accounts: try listAccounts())
     }
 
     /// Pure resolution policy — exposed so it can be unit-tested without
     /// spawning a real `op` subprocess. See `resolveAccountArgument`.
-    public static func resolveAccount(configured: String?, accounts: [OpAccount]) throws -> String? {
+    public static func resolveAccount(configured: String, accounts: [OpAccount]) throws -> String {
         guard let onlyAccount = accounts.first else {
             throw OpClientError.accountUnavailable(
                 "No 1Password account is available. Open 1Password and sign in.")
         }
 
-        if let configured, !configured.isEmpty {
+        if !configured.isEmpty {
             if let match = accounts.first(where: { $0.matches(configured) }) {
                 return match.url
             }
@@ -185,8 +153,7 @@ public final class OpClient: WhoamiProvider {
             + "Choose one in Settings.")
     }
 
-    public func itemList(tag: String, account: String?) throws -> [ItemSummary] {
-        try preflight()
+    public func itemList(tag: String, account: String) throws -> [ItemSummary] {
         let args = buildArgs(["item", "list", "--tags", tag], account: account)
         let result = try runProcess(args: args)
         guard result.exitCode == 0 else {
@@ -195,7 +162,7 @@ public final class OpClient: WhoamiProvider {
         return try decode([ItemSummary].self, from: result.stdout)
     }
 
-    public func itemGet(id: String, account: String?) throws -> FullItem {
+    public func itemGet(id: String, account: String) throws -> FullItem {
         let args = buildArgs(["item", "get", id], account: account)
         let result = try runProcess(args: args)
         guard result.exitCode == 0 else {
@@ -204,62 +171,11 @@ public final class OpClient: WhoamiProvider {
         return try decode(FullItem.self, from: result.stdout)
     }
 
-    /// `op whoami` as a soft preflight. Only `.noAccounts` is a hard stop —
-    /// that's the authoritative signal that 1P access was revoked (FR-12a).
-    /// `.locked` / `.unknown` / `.timeout` pass through so that the next real
-    /// `op` call can establish a Desktop-App-Auth session via Touch-ID (which
-    /// `op whoami` itself deliberately does NOT trigger).
-    private func preflight() throws {
-        switch try whoami() {
-        case .authenticated, .locked, .timeout, .unknown:
-            return
-        case .noAccounts:
-            throw OpClientError.processFailed(
-                stderr: "no accounts configured (1Password access revoked?)",
-                exitCode: -1
-            )
-        }
-    }
-
-    // MARK: - Error parsing (pure, unit-testable)
-
-    /// Parses `op whoami` output into a `WhoamiResult`. Exposed as a pure function so
-    /// error-detection can be covered by XCTest without spawning a real subprocess.
-    ///
-    /// Heuristics mirror what legacy `htpasswd-host.js` (and 1P support threads)
-    /// observe in practice:
-    ///   - locked: stderr contains "RequestDelegatedSession" or "session has expired"
-    ///   - noAccounts: stderr contains "No accounts configured"
-    public static func parseWhoami(stdout: String, stderr: String, exitCode: Int32) -> WhoamiResult {
-        if exitCode == 0 {
-            // `op whoami --format=json` returns an object like
-            // {"url":"my.1password.com","email":"foo","user_uuid":"...","account_uuid":"..."}
-            if let data = stdout.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let account = (obj["url"] ?? obj["account_uuid"]) as? String {
-                return .authenticated(account: account)
-            }
-            return .authenticated(account: "")
-        }
-
-        let lower = stderr.lowercased()
-        if lower.contains("no accounts configured") || lower.contains("no account") && lower.contains("configured") {
-            return .noAccounts
-        }
-        if lower.contains("requestdelegatedsession") || lower.contains("session has expired")
-            || lower.contains("session expired") || lower.contains("not currently signed in")
-            || lower.contains("is not signed in")
-        {
-            return .locked
-        }
-        return .unknown(stderr: stderr, exitCode: exitCode)
-    }
-
     // MARK: - Subprocess primitives
 
     private func buildArgs(_ command: [String], account: String?) -> [String] {
         var args = command
-        if let account, !account.isEmpty {
+        if let account {
             args.append(contentsOf: ["--account", account])
         }
         args.append(contentsOf: ["--format", "json"])

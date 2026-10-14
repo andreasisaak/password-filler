@@ -2,72 +2,6 @@ import XCTest
 
 final class OpClientTests: XCTestCase {
 
-    // MARK: - parseWhoami (pure function, no subprocess)
-
-    func testParseWhoamiSuccessReturnsAuthenticated() {
-        let stdout =
-            #"{"url":"team.1password.com","email":"user@example.com","# +
-            #""user_uuid":"ABC","account_uuid":"XYZ"}"#
-        let result = OpClient.parseWhoami(stdout: stdout, stderr: "", exitCode: 0)
-        XCTAssertEqual(result, .authenticated(account: "team.1password.com"))
-    }
-
-    func testParseWhoamiSuccessWithoutURLFallsBackToUUID() {
-        let stdout = #"{"account_uuid":"XYZ"}"#
-        let result = OpClient.parseWhoami(stdout: stdout, stderr: "", exitCode: 0)
-        XCTAssertEqual(result, .authenticated(account: "XYZ"))
-    }
-
-    func testParseWhoamiLockedFromRequestDelegatedSession() {
-        let stderr = "[ERROR] 2026/04/21 16:15:00 RequestDelegatedSession failed: session has expired"
-        let result = OpClient.parseWhoami(stdout: "", stderr: stderr, exitCode: 1)
-        XCTAssertEqual(result, .locked)
-    }
-
-    func testParseWhoamiLockedFromSessionExpiredMessage() {
-        let stderr = "[ERROR] session has expired, please sign in again"
-        let result = OpClient.parseWhoami(stdout: "", stderr: stderr, exitCode: 1)
-        XCTAssertEqual(result, .locked)
-    }
-
-    func testParseWhoamiNoAccounts() {
-        let stderr = "[ERROR] No accounts configured. Run `op account add` first."
-        let result = OpClient.parseWhoami(stdout: "", stderr: stderr, exitCode: 1)
-        XCTAssertEqual(result, .noAccounts)
-    }
-
-    func testParseWhoamiAccountIsNotSignedIn() {
-        // `op` started emitting this phrasing when the account metadata is
-        // still on disk but the desktop-app-auth session is gone. Commit
-        // 799aec7 reclassified it from `.unknown` to `.locked` so the popover
-        // shows the right "1Password gesperrt" hint instead of a vague
-        // "Unbekannter Fehler". Test guards against regressing to the old
-        // classification.
-        let stderr = "[ERROR] account team.1password.com is not signed in"
-        let result = OpClient.parseWhoami(stdout: "", stderr: stderr, exitCode: 1)
-        XCTAssertEqual(result, .locked)
-    }
-
-    func testParseWhoamiNotCurrentlySignedIn() {
-        // Sister phrasing from the same 1P-CLI error family as
-        // `testParseWhoamiAccountIsNotSignedIn` — `op` has used both forms
-        // across minor versions. Both must map to `.locked`.
-        let stderr = "[ERROR] you are not currently signed in to any accounts"
-        let result = OpClient.parseWhoami(stdout: "", stderr: stderr, exitCode: 1)
-        XCTAssertEqual(result, .locked)
-    }
-
-    func testParseWhoamiUnknownErrorIsPreserved() {
-        let stderr = "[ERROR] network unreachable"
-        let result = OpClient.parseWhoami(stdout: "", stderr: stderr, exitCode: 6)
-        if case let .unknown(capturedStderr, capturedExit) = result {
-            XCTAssertEqual(capturedStderr, stderr)
-            XCTAssertEqual(capturedExit, 6)
-        } else {
-            XCTFail("Expected .unknown, got \(result)")
-        }
-    }
-
     // MARK: - Path resolution
 
     func testBinaryNotFoundWhenNoCandidateExists() throws {
@@ -79,7 +13,6 @@ final class OpClientTests: XCTestCase {
 
         let client = OpClient(
             bundledOpURL: tmpDir.appendingPathComponent("op"),
-            account: nil,
             timeout: 5
         )
 
@@ -169,7 +102,7 @@ final class OpClientTests: XCTestCase {
             "louis-internet.1password.com"
         )
         XCTAssertEqual(
-            try OpClient.resolveAccount(configured: nil, accounts: [Self.personalAccount]),
+            try OpClient.resolveAccount(configured: "", accounts: [Self.personalAccount]),
             "my.1password.com"
         )
     }
@@ -177,7 +110,7 @@ final class OpClientTests: XCTestCase {
     func testResolveAccountThrowsWhenConfigEmptyAndMultipleAccounts() {
         XCTAssertThrowsError(
             try OpClient.resolveAccount(
-                configured: nil,
+                configured: "",
                 accounts: [Self.personalAccount, Self.businessAccount]
             )
         ) { error in

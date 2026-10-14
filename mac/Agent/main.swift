@@ -8,7 +8,7 @@ import os.log
 //   2. Build OpClient + ItemStore
 //   3. Build AgentService (NSXPCListenerDelegate) and attach the Mach-Service listener
 //   4. Build UnixSocketServer for pf-nmh-bridge clients
-//   5. Build RevokePoller (30 min + wake) and map events to ConnectionState
+//   5. Seed ConnectionState from the persisted cache
 //   6. RunLoop.main.run() — launchd owns the process lifecycle
 
 let lifecycleLog = Logger(subsystem: "app.passwordfiller.agent", category: "lifecycle")
@@ -41,7 +41,7 @@ let ttlSeconds = initialConfig.effectiveCacheTtlSeconds
 // 1Password desktop app for a fresh Touch-ID prompt.
 let persistentCache = PersistentCache()
 let store = ItemStore(ttl: ttlSeconds, persistence: persistentCache)
-let opClient = OpClient(account: initialConfig.opAccount.isEmpty ? nil : initialConfig.opAccount)
+let opClient = OpClient()
 let identityUpdater = IdentityStoreUpdater()
 
 // One trust boundary shared by both IPC entrypoints (XPC + Unix socket).
@@ -82,23 +82,13 @@ do {
 
 // MARK: - Connection state seed
 
-// The RevokePoller used to drive `connectionState` from periodic `op whoami`
-// polls, but `whoami` is a *passive* check (it doesn't trigger the 1Password
-// Touch-ID prompt that would renew a lost CLI authorization), so it can't
-// distinguish "1P Desktop locked" from "Agent's CLI trust was invalidated by
-// a new build". We were misclassifying the latter as the former, showing
-// "1Password gesperrt" while 1P Desktop was wide open next to the popover.
-//
-// Policy C (2026-04-23) dropped the automatic revocation-on-revoke path
-// anyway, so the poller had no remaining responsibility. We now seed the
-// connection state from what the persistent cache tells us at launch:
-// if items are on disk, the Agent has already been connected successfully
-// in a prior run and the cache is valid for Basic-Auth lookups — the popover
-// should say "Verbunden", not "Nicht konfiguriert", until the next manual
-// refresh proves otherwise.
+// Items on disk mean an earlier run connected successfully and the cache
+// serves Basic-Auth lookups, so the popover says "Verbunden" (not "Nicht
+// konfiguriert") until the next refresh proves otherwise. Only refreshes
+// change the state after that; nothing polls 1Password (CLAUDE.md §
+// Credential cache, Policy C).
 if store.count > 0 {
     agentService.setConnectionState(.connected)
-    agentService.setLastErrorMessage(nil)
 }
 
 lifecycleLog.info("Agent ready (itemCount=\(store.count, privacy: .public))")

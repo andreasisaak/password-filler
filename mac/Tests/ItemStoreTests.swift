@@ -6,7 +6,7 @@ final class ItemStoreTests: XCTestCase {
 
     func testExactHostnameMatch() {
         let store = ItemStore(ttl: 3600)
-        let item = makeItem(id: "1", title: "Server A", hostnames: ["app.example.com"])
+        let item = StoredItem.example(id: "1", title: "Server A", hostnames: ["app.example.com"])
         store.replace(with: [item])
 
         XCTAssertEqual(store.lookup(hostname: "app.example.com")?.itemId, "1")
@@ -14,7 +14,7 @@ final class ItemStoreTests: XCTestCase {
 
     func testUniqueSuffixMatch() {
         let store = ItemStore(ttl: 3600)
-        let item = makeItem(id: "1", title: "Server A", hostnames: ["example.com"])
+        let item = StoredItem.example(id: "1", title: "Server A", hostnames: ["example.com"])
         store.replace(with: [item])
 
         XCTAssertEqual(store.lookup(hostname: "foo.example.com")?.itemId, "1")
@@ -22,7 +22,7 @@ final class ItemStoreTests: XCTestCase {
 
     func testNoMatchReturnsNil() {
         let store = ItemStore(ttl: 3600)
-        let item = makeItem(id: "1", title: "Server A", hostnames: ["example.com"])
+        let item = StoredItem.example(id: "1", title: "Server A", hostnames: ["example.com"])
         store.replace(with: [item])
 
         XCTAssertNil(store.lookup(hostname: "nonexistent.org"))
@@ -32,8 +32,8 @@ final class ItemStoreTests: XCTestCase {
         // Two items share base domain `example.com` but one has `staging.example.com`
         // which is a closer suffix match than bare `example.com`.
         let store = ItemStore(ttl: 3600)
-        let generic = makeItem(id: "generic", title: "Generic", hostnames: ["example.com"])
-        let staging = makeItem(id: "staging", title: "Staging", hostnames: ["staging.example.com"])
+        let generic = StoredItem.example(id: "generic", title: "Generic", hostnames: ["example.com"])
+        let staging = StoredItem.example(id: "staging", title: "Staging", hostnames: ["staging.example.com"])
         store.replace(with: [generic, staging])
 
         XCTAssertEqual(
@@ -48,8 +48,8 @@ final class ItemStoreTests: XCTestCase {
         // subdomain depth. Request `foo.example.com` has depth 1; only the item with
         // a depth-1 stored hostname wins.
         let store = ItemStore(ttl: 3600)
-        let sameDepth = makeItem(id: "sameDepth", title: "Same", hostnames: ["bar.example.com"])
-        let deeper = makeItem(id: "deeper", title: "Deeper", hostnames: ["a.b.example.com"])
+        let sameDepth = StoredItem.example(id: "sameDepth", title: "Same", hostnames: ["bar.example.com"])
+        let deeper = StoredItem.example(id: "deeper", title: "Deeper", hostnames: ["a.b.example.com"])
         store.replace(with: [sameDepth, deeper])
 
         XCTAssertEqual(
@@ -62,8 +62,8 @@ final class ItemStoreTests: XCTestCase {
     func testAmbiguousReturnsNil() {
         // Two items share the same depth and no shared suffix beyond base domain.
         let store = ItemStore(ttl: 3600)
-        let first = makeItem(id: "a", title: "A", hostnames: ["one.example.com"])
-        let second = makeItem(id: "b", title: "B", hostnames: ["two.example.com"])
+        let first = StoredItem.example(id: "a", title: "A", hostnames: ["one.example.com"])
+        let second = StoredItem.example(id: "b", title: "B", hostnames: ["two.example.com"])
         store.replace(with: [first, second])
 
         XCTAssertNil(
@@ -74,7 +74,7 @@ final class ItemStoreTests: XCTestCase {
 
     func testHostnameCaseInsensitive() {
         let store = ItemStore(ttl: 3600)
-        let item = makeItem(id: "1", title: "Server", hostnames: ["app.example.com"])
+        let item = StoredItem.example(id: "1", title: "Server", hostnames: ["app.example.com"])
         store.replace(with: [item])
 
         XCTAssertEqual(store.lookup(hostname: "APP.Example.COM")?.itemId, "1")
@@ -91,7 +91,7 @@ final class ItemStoreTests: XCTestCase {
         // ever teaches ItemStore to expand wildcards, this test must be
         // updated deliberately.
         let store = ItemStore(ttl: 3600)
-        let wildcard = makeItem(id: "w", title: "Wildcard", hostnames: ["*.example.com"])
+        let wildcard = StoredItem.example(id: "w", title: "Wildcard", hostnames: ["*.example.com"])
         store.replace(with: [wildcard])
 
         XCTAssertEqual(
@@ -101,12 +101,26 @@ final class ItemStoreTests: XCTestCase {
         )
     }
 
+    func testForeignTenantOnSharedPlatformGetsNoCredentials() {
+        // Anyone can create `<random>.cloudfront.net` or `<name>.herokuapp.com`
+        // and answer with a 401. The suffix stage must not treat the platform
+        // domain as a shared base domain and fill the only stored tenant.
+        let store = ItemStore(ttl: 3600)
+        let cloudFront = StoredItem.example(id: "cf", title: "CDN", hostnames: ["d111111abcdef8.cloudfront.net"])
+        let heroku = StoredItem.example(id: "heroku", title: "Heroku", hostnames: ["kunde-staging.herokuapp.com"])
+        store.replace(with: [cloudFront, heroku])
+
+        XCTAssertNil(store.lookup(hostname: "attacker123.cloudfront.net"))
+        XCTAssertNil(store.lookup(hostname: "evil.herokuapp.com"))
+        XCTAssertEqual(store.lookup(hostname: "d111111abcdef8.cloudfront.net")?.itemId, "cf")
+    }
+
     // MARK: - TTL
 
     func testTTLEvictsOnRead() {
         let store = ItemStore(ttl: 60) // 1 minute TTL
         let cachedAt = Date(timeIntervalSince1970: 1_000)
-        let item = makeItem(id: "1", title: "Stale", hostnames: ["example.com"], cachedAt: cachedAt)
+        let item = StoredItem.example(id: "1", title: "Stale", hostnames: ["example.com"], cachedAt: cachedAt)
         store.replace(with: [item])
 
         let freshNow = cachedAt.addingTimeInterval(30)
@@ -122,7 +136,7 @@ final class ItemStoreTests: XCTestCase {
         // that are now out of window.
         let store = ItemStore(ttl: 7 * 86_400) // Start at default 7-day window
         let cachedAt = Date(timeIntervalSince1970: 1_000)
-        let item = makeItem(id: "1", title: "X", hostnames: ["example.com"], cachedAt: cachedAt)
+        let item = StoredItem.example(id: "1", title: "X", hostnames: ["example.com"], cachedAt: cachedAt)
         store.replace(with: [item])
 
         let twoDaysLater = cachedAt.addingTimeInterval(2 * 86_400)
@@ -136,35 +150,24 @@ final class ItemStoreTests: XCTestCase {
     func testTTLDoesNotEvictWithinWindow() {
         let store = ItemStore(ttl: 3600)
         let cachedAt = Date(timeIntervalSince1970: 1_000)
-        let item = makeItem(id: "1", title: "Fresh", hostnames: ["example.com"], cachedAt: cachedAt)
+        let item = StoredItem.example(id: "1", title: "Fresh", hostnames: ["example.com"], cachedAt: cachedAt)
         store.replace(with: [item])
 
         let now = cachedAt.addingTimeInterval(1800) // 30 min later, TTL is 60 min
         XCTAssertEqual(store.lookup(hostname: "example.com", now: now)?.itemId, "1")
     }
 
-    func testEvictAllClearsStore() {
-        let store = ItemStore(ttl: 3600)
-        let item = makeItem(id: "1", title: "X", hostnames: ["example.com"])
-        store.replace(with: [item])
-
-        store.evictAll()
-
-        XCTAssertEqual(store.count, 0)
-        XCTAssertNil(store.lookup(hostname: "example.com"))
-    }
-
     // MARK: - Merge display
 
     func testMergeIdenticalItemsFromTwoVaults() {
         let store = ItemStore(ttl: 3600)
-        let sharedVault = makeItem(
+        let sharedVault = StoredItem.example(
             id: "a", title: "Demo Item",
             hostnames: ["app.example.com"],
             username: "admin", password: "pw",
             sourceVault: "Shared"
         )
-        let privateVault = makeItem(
+        let privateVault = StoredItem.example(
             id: "b", title: "Demo Item",
             hostnames: ["app.example.com"],
             username: "admin", password: "pw",
@@ -179,13 +182,13 @@ final class ItemStoreTests: XCTestCase {
 
     func testMergeDoesNotCollapseDifferentCredentials() {
         let store = ItemStore(ttl: 3600)
-        let firstCred = makeItem(
+        let firstCred = StoredItem.example(
             id: "a", title: "Same Title",
             hostnames: ["example.com"],
             username: "u1", password: "p1",
             sourceVault: "V1"
         )
-        let secondCred = makeItem(
+        let secondCred = StoredItem.example(
             id: "b", title: "Same Title",
             hostnames: ["example.com"],
             username: "u2", password: "p2",
@@ -199,9 +202,9 @@ final class ItemStoreTests: XCTestCase {
 
     func testDisplaySortedByTitleCaseInsensitive() {
         let store = ItemStore(ttl: 3600)
-        let zeta = makeItem(id: "1", title: "zeta", hostnames: ["z.de"])
-        let alpha = makeItem(id: "2", title: "Alpha", hostnames: ["a.de"])
-        let mike = makeItem(id: "3", title: "mike", hostnames: ["m.de"])
+        let zeta = StoredItem.example(id: "1", title: "zeta", hostnames: ["z.de"])
+        let alpha = StoredItem.example(id: "2", title: "Alpha", hostnames: ["a.de"])
+        let mike = StoredItem.example(id: "3", title: "mike", hostnames: ["m.de"])
         store.replace(with: [zeta, alpha, mike])
 
         let rows = store.mergedForDisplay()
@@ -292,29 +295,5 @@ final class ItemStoreTests: XCTestCase {
         XCTAssertEqual(ItemStore.sharedSuffixLength("a.example.com", "b.example.com"), 2)
         XCTAssertEqual(ItemStore.sharedSuffixLength("a.example.com", "a.example.com"), 3)
         XCTAssertEqual(ItemStore.sharedSuffixLength("example.com", "other.org"), 0)
-    }
-
-    // MARK: - Helpers
-
-    private func makeItem(
-        id: String,
-        title: String,
-        hostnames: [String],
-        username: String = "user",
-        password: String = "pass",
-        sourceVault: String? = nil,
-        cachedAt: Date = Date()
-    ) -> StoredItem {
-        let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-        return StoredItem(
-            itemId: id,
-            title: title,
-            hostnames: hostnames,
-            domains: domains,
-            username: username,
-            password: password,
-            sourceVault: sourceVault,
-            cachedAt: cachedAt
-        )
     }
 }

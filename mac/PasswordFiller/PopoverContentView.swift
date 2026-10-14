@@ -128,7 +128,6 @@ private struct StatusRow: View {
         switch state {
         case .connected:      return "lock.fill"
         case .locked:         return "lock.slash.fill"
-        case .revoked:        return "xmark.octagon.fill"
         case .notConfigured:  return "gear.badge.questionmark"
         case .error:          return "exclamationmark.triangle.fill"
         }
@@ -140,7 +139,7 @@ private struct StatusRow: View {
         switch status?.connectionState {
         case .connected:      return .green
         case .locked:         return .yellow
-        case .revoked, .error: return .red
+        case .error:          return .red
         case .notConfigured, .none: return .secondary
         }
     }
@@ -155,7 +154,6 @@ private struct StatusRow: View {
         switch status.connectionState {
         case .connected:     return String(localized: "Connected · \(status.itemCount) items")
         case .locked:        return String(localized: "1Password locked")
-        case .revoked:       return String(localized: "1Password access revoked")
         case .notConfigured: return String(localized: "Not configured")
         case .error:         return String(localized: "Error during refresh")
         }

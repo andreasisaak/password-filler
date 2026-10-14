@@ -38,9 +38,10 @@ domain usually match too, so a missing exact host is not proof that it fails.
 
 ## Chrome
 
-Navigate to the protected URL as you would any other page. If a page still shows a
-login dialog, the host has no matching 1Password item — tell the user which host,
-instead of offering to type credentials.
+Navigate to the protected URL as you would any other page. Password Filler fills
+`https://` pages only; over plain `http://` the login dialog always appears. If an
+`https://` page still shows a login dialog, the host has no matching 1Password item —
+tell the user which host, instead of offering to type credentials.
 
 ## Playwright MCP
 

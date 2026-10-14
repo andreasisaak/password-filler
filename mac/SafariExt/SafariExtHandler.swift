@@ -9,9 +9,9 @@ import os.log
 /// URL into the Shared Keychain so `CredentialProviderViewController` can
 /// read it when Safari's Basic-Auth dialog invokes `prepareCredentialList(
 /// for: [])` with empty identifiers (see `CredentialProviderViewController
-/// .readObservedHost()`).
+/// .readObservedPayload()`).
 ///
-/// Wire format: `SharedHostKeychain.Payload` (`{host, ts}`) — the same struct
+/// Wire format: `SharedHostKeychain.Payload` (`{host, scheme, ts}`) — the same struct
 /// both extensions decode, so a schema change breaks the build, not the
 /// runtime. Entries older than `SharedHostKeychain.maxFreshnessSeconds` are
 /// ignored by the reader.
@@ -50,9 +50,10 @@ final class SafariExtHandler: NSObject, NSExtensionRequestHandling {
         // .host` (the host the 401 came from, which can differ from the
         // document host when a sub-request to another origin triggers the
         // challenge).
+        let url = URL(string: urlStr)
         let host = (dict["host"] as? String)
             .flatMap { $0.isEmpty ? nil : $0 }
-            ?? URL(string: urlStr)?.host
+            ?? url?.host
             ?? ""
 
         guard !host.isEmpty else {
@@ -60,14 +61,17 @@ final class SafariExtHandler: NSObject, NSExtensionRequestHandling {
             return
         }
 
-        let payload = SharedHostKeychain.Payload(host: host)
+        // The scheme travels with the host so the CredProvider can refuse
+        // plain-HTTP challenges (`Payload.blocksFill`).
+        let scheme = url?.scheme?.lowercased() ?? ""
+        let payload = SharedHostKeychain.Payload(host: host, scheme: scheme)
         guard let data = try? JSONEncoder().encode(payload) else {
             log.error("payload encode failed")
             return
         }
 
         writeKeychain(data: data)
-        log.log("wrote observed host type=\(type, privacy: .public) host=\(host, privacy: .private)")
+        log.log("wrote observed host type=\(type, privacy: .public) scheme=\(scheme, privacy: .public) host=\(host, privacy: .private)")
     }
 
     /// Updates the existing keychain entry or adds one if missing. Using

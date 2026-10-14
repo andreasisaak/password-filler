@@ -112,15 +112,6 @@ public final class PersistentCache: @unchecked Sendable {
         }
     }
 
-    /// Delete both the on-disk blob and the Keychain key. Used by the
-    /// settings-window "Logout" button — gives the user an explicit way to
-    /// forget everything this Agent has ever cached from 1Password.
-    public func wipe() {
-        try? FileManager.default.removeItem(at: fileURL)
-        SecItemDelete(baseQuery as CFDictionary)
-        log.info("wiped cache file and keychain key")
-    }
-
     /// Shared attribute set used by every SecItem call — identifies the key by
     /// service+account within the Team-ID-prefixed access group, and opts into
     /// the Data-Protection Keychain for Secure-Enclave-hardened storage.
@@ -191,18 +182,20 @@ public final class PersistentCache: @unchecked Sendable {
 
 // MARK: - JSON codec helpers with ISO8601 dates
 
-private extension JSONEncoder {
+// Internal, not private: `StoredItemTests` decodes snapshot fixtures with the
+// exact codec the cache uses.
+extension JSONEncoder {
     static let iso8601: JSONEncoder = {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }()
 }
 
-private extension JSONDecoder {
+extension JSONDecoder {
     static let iso8601: JSONDecoder = {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }()
 }

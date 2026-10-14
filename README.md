@@ -75,6 +75,10 @@ Three-stage lookup:
 
 Wildcards in URLs are not glob-expanded — `*.example.com` matches `app.example.com` because `eTLD+1` resolves both to `example.com`, not because `*` was treated specially.
 
+The base domain comes from the official [Public Suffix List](https://publicsuffix.org), including its section for shared hosting platforms. On a platform such as `herokuapp.com` or `cloudfront.net`, every customer subdomain counts as its own domain: an item for `myapp.herokuapp.com` matches only that host and its subdomains, never `otherapp.herokuapp.com`. Hosts outside the list (`localhost`, `nas.local`) match only exactly.
+
+Password Filler fills only `https://` requests, in Chrome, Firefox, Brave and Safari. A login prompt over plain `http://` shows the browser's own dialog, because the credentials would otherwise travel unencrypted.
+
 ## Daily usage
 
 - Visit any `.htaccess`-tagged URL — credentials fill automatically, no dialog
@@ -115,9 +119,9 @@ The Chrome/Firefox/Brave extensions auto-update via the Chrome Web Store and Fir
 
 ## Privacy & security
 
-- Credentials are fetched on-demand from your local 1Password app via the bundled `op` CLI. Nothing leaves your Mac
+- Credentials are fetched on-demand from your local 1Password app via 1Password's own `op` CLI. Nothing leaves your Mac
 - The cache is encrypted at rest with a per-Mac AES-256-GCM key stored in the macOS Keychain — credentials are never written to disk in plaintext
-- When you revoke 1Password access (`op signout` or removing the account), the next refresh fails with `noAccounts` and the cache is wiped on the next poll cycle (≤30 min, debounced on wake)
+- Revoking 1Password access does not wipe the cache. Credentials already cached stay usable until the cache TTL expires (Settings, default 7 days, at most 30). Pick a short TTL if offboarding speed matters to you
 - The XPC channel between Agent and Main-App / Safari extensions is restricted by Mach-Service name to processes signed with team ID `A5278RL7RX`
 - The Agent answers the Native-Messaging bridge only when a supported browser started it, so a script cannot launch the bridge by hand to read credentials. This is a hurdle against accidental misuse, not a defense against malicious software running as your user
 - `password-filler-mcp` gets hostnames and `run` credentials only while `Settings → For AI Agents` is switched on, and cannot use the actions reserved for the browser extensions (`lookup`)
@@ -144,7 +148,7 @@ For private fields (hostnames, credentials), use `log stream --level=debug --pre
 
 **Manual smoke checklist**
 
-The full QA checklist for releases is in [`mac/TESTING.md`](mac/TESTING.md) — 13 scenarios covering every browser, Touch-ID lifecycle, offboarding, app-rename, Sparkle round-trip, and uninstall.
+The full QA checklist for releases is in [`mac/TESTING.md`](mac/TESTING.md) — 13 scenarios covering every browser, Touch-ID lifecycle, stale `op_account`, app-rename, Sparkle round-trip, and uninstall.
 
 ## Repository layout
 
@@ -156,13 +160,13 @@ mac/                Native macOS app (Swift + xcodegen)
   SafariExt/        Safari Web Extension
   NMHBridge/        pf-nmh-bridge stdio ↔ socket proxy
   MCPServer/        password-filler-mcp: MCP server + `run` for AI agents
-  Tests/            XCTest unit + integration suites (166 tests)
+  Tests/            XCTest unit + integration suites (161 tests)
   TESTING.md        Manual smoke-test checklist
 extension/          MV3 extension for Chrome/Firefox/Brave (proxy-only)
 claude-plugin/      Claude Code plugin (skill + MCP server config)
 .claude-plugin/     Plugin marketplace manifest for this repo
 installer/          Shared entitlements + ExportOptions
-scripts/            CWS ZIP builder + Sparkle appcast updater
+scripts/            CWS ZIP builder, Sparkle appcast updater, Public Suffix List generator
 specs/v1-mac-app/   Requirements, design, plan
 updates/            Sparkle mac-appcast.xml (Mac app update feed)
 ```

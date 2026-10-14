@@ -210,15 +210,15 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         let config = configProvider()
 
         // Update TTL from config so the next eviction uses the current setting.
-        store.ttl = TimeInterval(max(1, config.cacheTtlDays) * 86_400)
+        store.ttl = config.effectiveCacheTtlSeconds
 
         do {
             // Reconcile the configured `op_account` against the accounts `op`
             // actually knows. A stale/wrong `op_account` (e.g. carried over
             // from an old install) self-heals here when only one account
             // exists, instead of failing every refresh.
-            let accountArgument = try opClient.resolveAccountArgument()
-            log.info("Resolved op account: \(accountArgument ?? "<none>", privacy: .public)")
+            let accountArgument = try opClient.resolveAccountArgument(configured: config.opAccount)
+            log.info("Resolved op account: \(accountArgument, privacy: .public)")
 
             let summaries = try opClient.itemList(tag: config.opTag, account: accountArgument)
             log.info("Fetched \(summaries.count, privacy: .public) item summaries")
@@ -261,8 +261,8 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
         } catch {
             let message = Self.describeError(error)
             log.error("Refresh failed: \(message, privacy: .public)")
-            // Don't wipe the cache — stale data is better than nothing for
-            // transient failures. `RevokePoller` handles authoritative eviction.
+            // Keep the cache: stale data beats nothing for transient failures,
+            // and only the TTL evicts (CLAUDE.md § Credential cache).
             if case OpClientError.processFailed = error {
                 setConnectionState(.locked)
             } else {
@@ -296,7 +296,7 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
     /// healthy and still gives ~6× the serial-port throughput.
     private func fanOutItemGet(
         for withHosts: [(summary: ItemSummary, hostnames: [String])],
-        account: String?
+        account: String
     ) async -> [FetchResult] {
         let opClient = self.opClient
         let maxInFlight = 5
@@ -316,12 +316,10 @@ public final class AgentService: NSObject, AgentServiceProtocol, NSXPCListenerDe
                         let full = try opClient.itemGet(id: summary.id, account: account)
                         let creds = ItemStore.extractCredentials(from: full.fields ?? [])
                         let stored: StoredItem? = creds.map { c in
-                            let domains = Array(Set(hostnames.compactMap { PublicSuffixList.eTLDPlusOne(host: $0) }))
-                            return StoredItem(
+                            StoredItem(
                                 itemId: summary.id,
                                 title: summary.title,
                                 hostnames: hostnames,
-                                domains: domains,
                                 username: c.username,
                                 password: c.password,
                                 sourceVault: summary.vault?.name,

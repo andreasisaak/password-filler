@@ -54,16 +54,17 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         log.info("prepareCredentialList serviceIdentifiers.count=\(serviceIdentifiers.count, privacy: .public)")
 
         // When Safari triggers us via the Basic-Auth dialog the identifier list
-        // is empty — we fall back to the URL SafariExt parked in the Shared
+        // is empty — we fall back to the host SafariExt parked in the Shared
         // Keychain. When an IdentityStore-typed identity is invoked instead
         // (rare for Basic-Auth, common for form-fill), macOS passes the host
-        // through `serviceIdentifiers[0]` and no keychain read is needed.
+        // through `serviceIdentifiers[0]`.
+        let observed = readObservedPayload()
         let host: String?
         if let first = serviceIdentifiers.first {
             host = Self.extractHost(from: first.identifier)
             log.info("Using serviceIdentifier host (from identity-store path)")
         } else {
-            host = readObservedHost()
+            host = observed?.host
         }
 
         guard let host, !host.isEmpty else {
@@ -71,7 +72,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
             return
         }
 
-        lookupAndComplete(host: host, startedAt: startedAt)
+        fillIfNotBlocked(host: host, observed: observed, startedAt: startedAt)
     }
 
     override func provideCredentialWithoutUserInteraction(for credentialRequest: any ASCredentialRequest) {
@@ -81,7 +82,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
             cancel(.credentialIdentityNotFound, reason: "cannot extract host from \(identifier)")
             return
         }
-        lookupAndComplete(host: host, startedAt: CFAbsoluteTimeGetCurrent())
+        fillIfNotBlocked(host: host, observed: readObservedPayload(), startedAt: CFAbsoluteTimeGetCurrent())
     }
 
     override func prepareInterfaceToProvideCredential(for credentialRequest: any ASCredentialRequest) {
@@ -98,6 +99,20 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     }
 
     // MARK: - Lookup + completion
+
+    /// The one scheme gate for every path. The Basic-Auth dialog path takes its
+    /// host from `observed`, so that observation's scheme always applies.
+    /// Identity-store paths only get a `.domain` identity without a scheme; a
+    /// fresh observation of the same host is their only scheme signal, and
+    /// without one (SafariExt disabled) the scheme is unknown.
+    private func fillIfNotBlocked(host: String, observed: SharedHostKeychain.Payload?, startedAt: CFAbsoluteTime) {
+        if let observed, observed.blocksFill(forHost: host) {
+            cancel(.credentialIdentityNotFound,
+                   reason: "host was last requested over \(observed.scheme.isEmpty ? "no scheme" : observed.scheme), not https")
+            return
+        }
+        lookupAndComplete(host: host, startedAt: startedAt)
+    }
 
     private func lookupAndComplete(host: String, startedAt: CFAbsoluteTime) {
         let log = self.log
@@ -270,12 +285,12 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 
     // MARK: - Shared Keychain read
 
-    /// Reads the JSON payload SafariExt wrote on the last `webNavigation` event.
-    /// Returns the host only if the entry exists, decodes cleanly, and is
-    /// fresh enough — otherwise `nil`, which makes `prepareCredentialList`
+    /// Reads the JSON payload SafariExt wrote on the last observed request.
+    /// Returns it only if the entry exists, decodes cleanly, and is fresh
+    /// enough — otherwise `nil`, which makes the Basic-Auth dialog path
     /// cancel with `credentialIdentityNotFound` and Safari falls back to its
     /// system dialog's manual fields.
-    private func readObservedHost() -> String? {
+    private func readObservedPayload() -> SharedHostKeychain.Payload? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: SharedHostKeychain.service,
@@ -298,7 +313,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
             log.info("keychain payload stale: age=\(payload.age, privacy: .public)s")
             return nil
         }
-        return payload.host
+        return payload
     }
 
     // MARK: - Helpers

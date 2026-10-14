@@ -57,13 +57,6 @@ public final class ItemStore: @unchecked Sendable {
         persistence?.persist(items: snapshot)
     }
 
-    public func evictAll() {
-        lock.lock()
-        items.removeAll()
-        lock.unlock()
-        persistence?.wipe()
-    }
-
     // MARK: - Accessors
 
     public var lastRefresh: Date? {
@@ -87,8 +80,6 @@ public final class ItemStore: @unchecked Sendable {
     /// Returns the best-matching item for a hostname, or `nil` if:
     ///   - no candidate matches, OR
     ///   - multiple candidates tie with no tiebreak winner (ambiguous → silent fail).
-    ///
-    /// Ported 1:1 from `host/htpasswd-host.js:254-335` (see git commit 49ec061).
     public func lookup(hostname rawHost: String, now: Date = Date()) -> StoredItem? {
         let host = rawHost.lowercased()
         lock.lock(); defer { lock.unlock() }
@@ -104,11 +95,7 @@ public final class ItemStore: @unchecked Sendable {
             return nil
         }
 
-        let candidates = items.filter { item in
-            item.hostnames.contains { stored in
-                PublicSuffixList.eTLDPlusOne(host: stored) == requestDomain
-            }
-        }
+        let candidates = items.filter { $0.domains.contains(requestDomain) }
 
         if candidates.count == 1 {
             return candidates[0]
@@ -173,8 +160,10 @@ public final class ItemStore: @unchecked Sendable {
             let password: String
         }
 
-        var order: [Key] = []
-        var groups: [Key: [StoredItem]] = [:]
+        // One group per key, in first-seen order: the first item carries the
+        // row's fields, later duplicates only add their vault.
+        var groups: [(first: StoredItem, sourceVaults: [String])] = []
+        var groupIndexByKey: [Key: Int] = [:]
 
         for item in snapshot {
             let key = Key(
@@ -183,23 +172,22 @@ public final class ItemStore: @unchecked Sendable {
                 username: item.username,
                 password: item.password
             )
-            if groups[key] == nil {
-                order.append(key)
-                groups[key] = [item]
+            let vaults = item.sourceVault.map { [$0] } ?? []
+            if let index = groupIndexByKey[key] {
+                groups[index].sourceVaults.append(contentsOf: vaults)
             } else {
-                groups[key]?.append(item)
+                groupIndexByKey[key] = groups.count
+                groups.append((first: item, sourceVaults: vaults))
             }
         }
 
-        return order.map { key in
-            let members = groups[key] ?? []
-            let vaults = members.compactMap(\.sourceVault)
-            return DisplayRow(
-                title: key.title,
-                hostnames: members.first?.hostnames ?? key.hostnames,
-                domains: members.first?.domains ?? [],
-                sourceVaults: vaults,
-                primaryItemId: members.first?.itemId ?? ""
+        return groups.map { group in
+            DisplayRow(
+                title: group.first.title,
+                hostnames: group.first.hostnames,
+                domains: group.first.domains,
+                sourceVaults: group.sourceVaults,
+                primaryItemId: group.first.itemId
             )
         }
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }

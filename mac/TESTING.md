@@ -67,19 +67,24 @@ mismatch in 1Password item.
 - [ ] Lock state detected and surfaced with correct label
 - [ ] Unlock + retry succeeds
 
-## 4. Offboarding Simulation
+## 4. Stale `op_account` (account reconciliation)
 
 1. Edit `~/Library/Application Support/passwordfiller/config.json` — set
    `op_account` to a bogus value (e.g. `"bogus.1password.com"`). Save.
 2. From menu-bar popover: Einstellungen → Allgemein → change TTL once (any
    value) to force `reloadConfig`.
 3. Click „Aktualisieren" in popover.
-4. Popover should show **Fehler-Icon** + the real 1P error (e.g. „op exit 1:
-   no accounts configured …").
-5. Basic-Auth fills for already-cached hosts **still work** (cache survives
-   until TTL expires) — test by hitting one of them in a browser.
+4. With exactly one account in `op account list`: the refresh **succeeds**
+   (the stale value self-heals; log line `Resolved op account: <real url>`).
+   With several accounts: popover shows the **Fehler-Icon** + „1Password
+   account "bogus.1password.com" was not found. Available: … Pick the right
+   one in Settings."
+5. Basic-Auth fills for already-cached hosts **still work** in both cases
+   (cache survives until TTL expires; nothing evicts it on errors or revoke,
+   Policy C) — test by hitting one of them in a browser.
 
-- [ ] Refresh surfaces the right error text
+- [ ] One account: refresh self-heals to the real account
+- [ ] Several accounts: refresh surfaces the `accountUnavailable` text
 - [ ] Existing cache still serves until TTL eviction
 
 ## 5. Cache-TTL Change
